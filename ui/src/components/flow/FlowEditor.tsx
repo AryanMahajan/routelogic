@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   connectedComponent,
   hasCycle,
@@ -68,6 +68,35 @@ export function FlowEditor({
   onRedo: () => void;
 }) {
   const [picking, setPicking] = useState(false);
+
+  // Ctrl+Alt+K opens the Add menu with its search focused; Ctrl+Alt+A adds a blank request,
+  // Ctrl+Alt+1 a variables block, Ctrl+Alt+2 a display, Ctrl+Alt+3 a condition. By `code`,
+  // because on some layouts AltGr turns a digit's `key` into something else.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (!(event.ctrlKey && event.altKey) || event.shiftKey) return;
+      const pick: Pick | null =
+        event.code === "KeyA"
+          ? { kind: "blank" }
+          : event.code === "Digit1"
+            ? { kind: "variables" }
+            : event.code === "Digit2"
+              ? { kind: "display" }
+              : event.code === "Digit3"
+                ? { kind: "condition" }
+                : null;
+      if (pick) {
+        event.preventDefault();
+        setPicking(false);
+        onAdd(pick);
+      } else if (event.code === "KeyK") {
+        event.preventDefault();
+        setPicking(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onAdd]);
   const [inspectorWidth, setInspectorWidth] = usePersistedNumber("routelogic.inspector.width", INSPECTOR_WIDTH);
   const cyclic = useMemo(() => hasCycle(flow), [flow]);
   const node = selected ? (flow.nodes.find((n) => n.id === selected) ?? null) : null;
@@ -121,7 +150,7 @@ export function FlowEditor({
           <button
             onClick={() => setPicking((p) => !p)}
             className="shrink-0 rounded bg-raised px-3 py-1 transition hover:brightness-125"
-            title="Add a step — or click / drag an endpoint from the API panel"
+            title="Add a step (Ctrl+Alt+K) — or click / drag an endpoint from the API panel"
           >
             + Add
           </button>
