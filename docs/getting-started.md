@@ -133,6 +133,18 @@ curl 'https://api.example.com/users?page=2' \
 RouteLogic splits this into method, URL, query parameters, headers, recognised auth, and body
 automatically — you never sort the pieces by hand. See [import](import.md).
 
+## Copy a request out
+
+The **Copy** button beside **Send** copies the open request as a command, resolved exactly
+as it would be sent — variables filled in, auth applied, so the copied command carries any
+secrets. The arrow beside it lists every format: the URL alone, cURL for bash or Windows
+`cmd`, PowerShell (`Invoke-WebRequest`), and `fetch` for the browser or Node.js. The format
+you pick becomes what the button does next time.
+
+The same menu copies the latest response body, and everything in the request's collection
+at once — as a list of URLs, as commands one after another, or as a HAR file with
+credentials blanked so it can be shared.
+
 ## Work without a project
 
 Choose **New Workspace** to use RouteLogic as a standalone API client — collections,

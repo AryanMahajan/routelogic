@@ -87,6 +87,9 @@ project have?"* to *"I can see it, understand it, and test it."*
   source location is kept. The exact command is shown before anything runs.
 - **Request editor** with tabs, path/query/header/body/auth editing, `{{variable}}`
   autocomplete, and **paste-a-cURL-into-the-URL-bar** (bash *and* Windows `cmd` quoting).
+  **Copy** any request back out as cURL (bash or `cmd`), PowerShell, `fetch` (browser or
+  Node.js), or just its URL — resolved exactly as it would be sent — and a whole collection
+  at once, including as a sanitized HAR.
 - **HTTP engine** built for predictability: redirects off by default and shown as a chain
   when on, credentials stripped on cross-origin hops, raw bytes preserved, per-request
   timeouts.
