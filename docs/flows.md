@@ -18,8 +18,10 @@ Open a project, scan it, then **Flows → New flow**. Add steps three ways:
 - **click** an endpoint in the API panel — it becomes a card, wired after the selected one;
 - **drag** an endpoint from the API panel onto the canvas — it lands where you drop it,
   unconnected;
-- **+ Add** in the toolbar — the same endpoint list with a filter, plus a blank request
-  and a condition.
+- **+ Add** in the toolbar (`Ctrl+Alt+K`) — the same endpoint list, grouped as in the API
+  panel, with a filter: type, `↑` `↓`, `Enter`. Plus a blank request, a condition, a
+  variables block and a display, which also have keys of their own: `Ctrl+Alt+A`,
+  `Ctrl+Alt+3`, `Ctrl+Alt+1`, `Ctrl+Alt+2`.
 
 Connect cards by dragging from a right-hand handle to a left-hand one. Edges are
 *dependencies*: a card runs after everything wired into it, and only if those passed.
@@ -32,6 +34,8 @@ Connect cards by dragging from a right-hand handle to a left-hand one. Edges are
 | Duplicate | `Ctrl+D` |
 | Select all · none | `Ctrl+A` · `Esc` |
 | Undo · redo | `Ctrl+Z` · `Ctrl+Y` (or `Ctrl+Shift+Z`), or ↶ ↷ in the toolbar |
+| Add a step | `Ctrl+Alt+K` to search the API; `Ctrl+Alt+A` blank request, `Ctrl+Alt+1` variables, `Ctrl+Alt+2` display, `Ctrl+Alt+3` condition |
+| Fit in view | `Ctrl+0` |
 | Right-click | the background: add a card right there, undo/redo, run, fit view. A card: run it, run what it is wired to, duplicate, disconnect, open its source, delete. A connection: delete it |
 | Run | `Ctrl+Enter` or **▶ Run** — everything, or what is wired to the selected card |
 | Run one card | `Ctrl+Shift+Enter` or **▶ Step** in the inspector |

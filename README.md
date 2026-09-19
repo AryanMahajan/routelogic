@@ -85,6 +85,9 @@ project have?"* to *"I can see it, understand it, and test it."*
   resolver — merged onto the static scan.
   Gaps get resolved, loop-registered routes appear, dead routes are labelled, and every
   source location is kept. The exact command is shown before anything runs.
+- **Keyboard first.** `Ctrl+K` finds any endpoint in the scanned API and opens it;
+  `Ctrl+/` shows every shortcut — tabs, sidebar panels, the URL bar, find-in-response,
+  copy, and the flow canvas all have one.
 - **Request editor** with tabs, path/query/header/body/auth editing, `{{variable}}`
   autocomplete, and **paste-a-cURL-into-the-URL-bar** (bash *and* Windows `cmd` quoting).
   **Copy** any request back out as cURL (bash or `cmd`), PowerShell, `fetch` (browser or
@@ -144,8 +147,9 @@ so nothing is retyped, and every card still knows the file and line that serves 
   with the repository; every request a run sends lands in history, redacted.
 
 `Ctrl+Enter` runs, `Ctrl+S` saves, `Ctrl+D` duplicates, `Delete` deletes, `Ctrl+Z` undoes,
-right-click for the rest, and `Ctrl+B` hides the sidebar when you want the whole screen for
-the canvas.
+`Ctrl+Alt+K` searches the API for a step to add (`Ctrl+Alt+A`, `1`, `2`, `3` add a blank
+request, a variables block, a display, a condition), right-click for the rest, and `Ctrl+B`
+hides the sidebar when you want the whole screen for the canvas.
 
 Read [docs/flows.md](docs/flows.md) for the reference,
 [docs/flows-walkthrough.md](docs/flows-walkthrough.md) for a step-by-step build of a real

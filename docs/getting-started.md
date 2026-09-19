@@ -68,6 +68,11 @@ Selecting an endpoint shows everything discovery could establish:
 Where discovery could not establish something, the UI says so. An unresolvable path segment
 appears as `?` with the source expression, rather than a guess.
 
+The tree opens with its groups folded; click a group to open it, or type in the filter
+box (`Ctrl+Shift+F`) and every group with a hit opens on its own. Quicker still, from
+anywhere: `Ctrl+K`, type part of the path, summary or group, `Enter` — the endpoint opens
+in a tab, whatever was in front.
+
 ## Save the whole API as a collection
 
 **Save all** in the API panel writes every resolved endpoint into one collection, one
@@ -114,7 +119,8 @@ Collections are yours, not the project's: they live in your user data directory
 on Linux) and the same list appears in every project you open. Environments, secrets and
 history stay with the project.
 
-The **Collections** panel is where they are managed: drag a request to reorder it, drop it
+The **Collections** panel is where they are managed. Folders start folded; click one to
+open it. Drag a request to reorder it, drop it
 on a folder or another collection to move it, and use the `…` menu on a request to rename,
 duplicate, delete or file it under a folder (`Users/Admin` nests). The `…` on a collection
 renames or deletes it; **+ Collection** makes an empty one.
@@ -144,6 +150,28 @@ you pick becomes what the button does next time.
 The same menu copies the latest response body, and everything in the request's collection
 at once — as a list of URLs, as commands one after another, or as a HAR file with
 credentials blanked so it can be shared.
+
+## Keyboard shortcuts
+
+`Ctrl+/` (or `F1`, or the ⌨ button at the foot of the sidebar) shows the full sheet. The
+ones worth learning first:
+
+| Keys | Does |
+|---|---|
+| `Ctrl+K` | Find an endpoint in the API and open it |
+| `Ctrl+T` · `Ctrl+W` | New request tab · close the tab |
+| `Ctrl+Tab` · `Ctrl+1`…`9` | Next tab · go to a tab (`Ctrl+9`: the last) |
+| `Ctrl+L` | Jump to the URL bar; `Enter` there sends |
+| `Ctrl+Shift+1`…`5` | Params, Headers, Body, Auth, Settings |
+| `Ctrl+Enter` · `Ctrl+S` | Send · save |
+| `Ctrl+F` | Find in the response body |
+| `Ctrl+Shift+C` | Copy the request in the format used last |
+| `Alt+1`…`4` | Sidebar: API, Flows, Collections, History |
+| `Ctrl+Shift+F` | Filter the API tree |
+| `Ctrl+Shift+R` | Rescan the project |
+| `Ctrl+B` | Hide or show the sidebar |
+
+The flow canvas has its own set — see [flows](flows.md).
 
 ## Work without a project
 
