@@ -379,13 +379,17 @@ function Canvas({
   );
 
   // Ctrl+D duplicates, Ctrl+A selects all, Escape clears — when the canvas has focus, not
-  // an input.
+  // an input. Ctrl+0 fits the flow in view from anywhere but an input.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
-      if (target && (target.closest("input, textarea, select, [contenteditable]") || !target.closest(".react-flow"))) {
+      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      if ((event.ctrlKey || event.metaKey) && event.code === "Digit0") {
+        event.preventDefault();
+        void fitView({ padding: 0.2, duration: 200 });
         return;
       }
+      if (target && !target.closest(".react-flow")) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
         event.preventDefault();
         duplicate(nodesRef.current.filter((n) => n.selected).map((n) => n.id));
@@ -400,7 +404,7 @@ function Canvas({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [duplicate, onSelect]);
+  }, [duplicate, onSelect, fitView]);
 
   return (
     <div

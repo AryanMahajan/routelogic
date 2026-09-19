@@ -29,6 +29,7 @@ import {
   type WorkspaceInfo,
 } from "./types";
 import { VariablesContext } from "./variables";
+import { CommandPalette } from "./components/CommandPalette";
 import { EnrichDialog } from "./components/EnrichDialog";
 import { EnvironmentDialog } from "./components/EnvironmentDialog";
 import { FlowEditor } from "./components/flow/FlowEditor";
@@ -37,6 +38,7 @@ import { ImportDialog } from "./components/ImportDialog";
 import { RequestEditor } from "./components/RequestEditor";
 import { ResizeHandle, usePersistedFlag, usePersistedNumber } from "./components/ResizeHandle";
 import { ResponseViewer } from "./components/ResponseViewer";
+import { ShortcutsDialog } from "./components/ShortcutsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { TabStrip } from "./components/TabStrip";
 
@@ -121,6 +123,8 @@ export default function App() {
   const [enriching, setEnriching] = useState(false);
   const [saveTarget, setSaveTarget] = useState("Saved");
   const [scan, setScan] = useState<ScanResult | null>(null);
+  const [palette, setPalette] = useState(false);
+  const [shortcuts, setShortcuts] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [variableNames, setVariableNames] = useState<string[]>([]);
   // Bumped to make the sidebar reload after something writes to the workspace.
@@ -245,6 +249,13 @@ export default function App() {
     }
   }
 
+  /** Ctrl+Tab and friends: the tab `delta` places along, wrapping. */
+  function cycleTab(delta: number) {
+    const index = tabs.findIndex((t) => t.id === activeId);
+    const next = tabs[(index + delta + tabs.length) % tabs.length];
+    if (next) setActiveId(next.id);
+  }
+
   const reloadVariables = useCallback(() => {
     void api
       .variableNames()
@@ -313,6 +324,11 @@ export default function App() {
       await addEndpointToFlow(tab.id, endpoint.id, null);
       return;
     }
+    await openEndpointTab(endpoint);
+  }
+
+  /** Open the endpoint in a request tab whatever is in front — the palette's way. */
+  async function openEndpointTab(endpoint: EndpointSpec) {
     try {
       const request = await api.openEndpoint(endpoint.id);
       openTab(request, (t) => t.request.spec_ref === request.spec_ref);
@@ -494,13 +510,37 @@ export default function App() {
     }
   }
 
-  // Ctrl/Cmd+Enter sends or runs, Ctrl+S saves, Ctrl+T opens a tab, Ctrl+W closes one —
-  // from anywhere, including inside an input.
+  // Ctrl/Cmd+Enter sends or runs, Ctrl+S saves, Ctrl+T opens a tab, Ctrl+W closes one,
+  // Ctrl+K finds an endpoint, Ctrl+/ lists all of these — from anywhere, including inside
+  // an input. The full table is in `shortcuts.ts`.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
+      if (event.key === "F1") {
+        event.preventDefault();
+        setShortcuts((s) => !s);
+        return;
+      }
       if (!(event.ctrlKey || event.metaKey)) return;
       const tab = activeRef.current;
-      if (event.key === "Enter" && tab) {
+      const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
+      if (event.code === "KeyK" && !event.altKey) {
+        event.preventDefault();
+        setPalette((p) => !p);
+      } else if (event.code === "Slash" && !event.altKey) {
+        event.preventDefault();
+        setShortcuts((s) => !s);
+      } else if (event.key === "Tab" || event.key === "PageDown" || event.key === "PageUp") {
+        event.preventDefault();
+        cycleTab(event.key === "PageUp" || (event.key === "Tab" && event.shiftKey) ? -1 : 1);
+      } else if (digit && !event.altKey && !event.shiftKey) {
+        // Ctrl+1 … Ctrl+8 by position; Ctrl+9 is always the last, as in a browser.
+        event.preventDefault();
+        const target = digit === "9" ? tabs[tabs.length - 1] : tabs[Number(digit) - 1];
+        if (target) setActiveId(target.id);
+      } else if (event.code === "KeyR" && event.shiftKey) {
+        event.preventDefault();
+        if (workspace?.kind === "project" && !scanning) void runScan();
+      } else if (event.key === "Enter" && tab) {
         event.preventDefault();
         if (tab.kind === "request" && !tab.sending && tab.request.url) void send(tab);
         // Ctrl+Enter follows the toolbar: everything, or what is wired to the selection.
@@ -544,6 +584,7 @@ export default function App() {
           refreshKey={refreshKey}
           onOpenWorkspace={openWorkspace}
           onImport={() => setImporting(true)}
+          onShortcuts={() => setShortcuts(true)}
           onWorkspaceChange={setWorkspace}
           onManageEnvironments={() => setManagingEnvironments(true)}
           scan={scan}
@@ -686,6 +727,19 @@ export default function App() {
               refresh();
             }}
             onImported={(imported) => openTab(imported)}
+          />
+        )}
+
+        {shortcuts && <ShortcutsDialog onClose={() => setShortcuts(false)} />}
+
+        {palette && (
+          <CommandPalette
+            scan={scan}
+            onClose={() => setPalette(false)}
+            onOpen={(endpoint) => {
+              setPalette(false);
+              void openEndpointTab(endpoint);
+            }}
           />
         )}
 

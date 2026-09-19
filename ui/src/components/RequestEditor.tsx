@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AuthConfig, BodyValue, Exchange, RequestDraft } from "../types";
 import { CopyMenu } from "./CopyMenu";
 import { cellClass, keyCellClass, KeyValueEditor, Row, Table } from "./KeyValueEditor";
@@ -30,6 +30,27 @@ export function RequestEditor({
   collection?: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("params");
+  const root = useRef<HTMLElement>(null);
+
+  // Ctrl+L jumps to the URL bar, Ctrl+Shift+1 … 5 to a tab — only for the editor in front,
+  // which is the only one mounted.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      if (event.code === "KeyL" && !event.shiftKey) {
+        event.preventDefault();
+        root.current?.querySelector<HTMLInputElement>("input")?.select();
+        return;
+      }
+      const digit = /^Digit([1-5])$/.exec(event.code)?.[1];
+      if (event.shiftKey && digit) {
+        event.preventDefault();
+        setTab((["params", "headers", "body", "auth", "settings"] as Tab[])[Number(digit) - 1]!);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   function patch(changes: Partial<RequestDraft>) {
     onChange({ ...request, ...changes });
@@ -51,7 +72,7 @@ export function RequestEditor({
   };
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
+    <section ref={root} className="flex min-h-0 flex-1 flex-col">
       {/* Method, URL, Send */}
       <div className="flex items-center gap-2 border-b border-edge p-3">
         <select
@@ -80,7 +101,7 @@ export function RequestEditor({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !sending && onSend) onSend();
           }}
-          placeholder="{{base_url}}/api/v1/users — or paste a cURL command"
+          placeholder="{{base_url}}/api/v1/users — or paste a cURL command (Ctrl+L)"
           className="rounded border border-edge bg-panel px-3 py-1.5 font-mono
             outline-none placeholder:text-muted/60 focus:border-accent"
         />
@@ -105,6 +126,7 @@ export function RequestEditor({
           <button
             key={name}
             onClick={() => setTab(name)}
+            title={`Ctrl+Shift+${["params", "headers", "body", "auth", "settings"].indexOf(name) + 1}`}
             className={`relative px-3 py-2 capitalize transition
               ${tab === name ? "text-ink" : "text-muted hover:text-ink"}`}
           >

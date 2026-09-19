@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Exchange } from "../types";
 import { CodeView } from "./CodeView";
 import { usePersistedFlag } from "./ResizeHandle";
@@ -26,6 +26,20 @@ export function ResponseViewer({
   const [matches, setMatches] = useState(0);
   const [active, setActive] = useState(0);
   const onMatchCount = useCallback((n: number) => setMatches(n), []);
+  const find = useRef<HTMLInputElement>(null);
+
+  // Ctrl+F: find in the body, whichever tab was showing.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.code === "KeyF") {
+        event.preventDefault();
+        setTab("body");
+        setTimeout(() => find.current?.select(), 0);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const pretty = useMemo(() => {
     if (!exchange) return null;
@@ -173,13 +187,14 @@ export function ResponseViewer({
 
           <span className="ml-auto flex items-center gap-1">
             <input
+              ref={find}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") step(e.shiftKey ? -1 : 1);
                 if (e.key === "Escape") setQuery("");
               }}
-              placeholder="Find in body…"
+              placeholder="Find in body… (Ctrl+F)"
               spellCheck={false}
               className="w-40 rounded border border-edge bg-ground px-2 py-0.5 outline-none placeholder:text-muted/60 focus:border-accent"
             />

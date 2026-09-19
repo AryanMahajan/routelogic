@@ -46,6 +46,21 @@ export function CopyMenu({
     return () => clearTimeout(t);
   }, [status]);
 
+  // Ctrl+Shift+C: the same as the button.
+  const latest = useRef({ request, format });
+  latest.current = { request, format };
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.code === "KeyC") {
+        if (!latest.current.request.url) return;
+        event.preventDefault();
+        copyOne(latest.current.format);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   function remember(next: CopyFormat) {
     setFormat(next);
     try {
@@ -71,7 +86,8 @@ export function CopyMenu({
 
   function copyOne(f: CopyFormat) {
     remember(f);
-    copy(FORMAT_LABELS[f], async () => render(await api.prepare(request), f));
+    const draft = latest.current.request;
+    copy(FORMAT_LABELS[f], async () => render(await api.prepare(draft), f));
   }
 
   function copyAll(f: CopyFormat | "har") {
@@ -140,7 +156,7 @@ export function CopyMenu({
       <button
         onClick={() => copyOne(format)}
         disabled={!request.url}
-        title={status?.detail ?? `Copy as ${FORMAT_LABELS[format]} — the request as it would be sent`}
+        title={status?.detail ?? `Copy as ${FORMAT_LABELS[format]} — the request as it would be sent (Ctrl+Shift+C)`}
         className={`px-3 py-1.5 transition hover:brightness-125 disabled:opacity-40 ${tone}`}
       >
         {status?.text ?? "Copy"}

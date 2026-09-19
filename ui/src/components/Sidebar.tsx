@@ -22,6 +22,7 @@ export function Sidebar({
   onOpenWorkspace,
   onChanged,
   onImport,
+  onShortcuts,
   onWorkspaceChange,
   onManageEnvironments,
   refreshKey,
@@ -43,6 +44,8 @@ export function Sidebar({
   /** Something wrote to the workspace; reload what the sidebar shows. */
   onChanged: () => void;
   onImport: () => void;
+  /** Show the keyboard shortcuts sheet. */
+  onShortcuts: () => void;
   onWorkspaceChange: (info: WorkspaceInfo) => void;
   onManageEnvironments: () => void;
   refreshKey: number;
@@ -85,6 +88,27 @@ export function Sidebar({
       setNotice(e instanceof CoreError ? e.message : String(e));
     }
   }
+
+  // Alt+1 … Alt+4 pick a panel; Ctrl+Shift+F puts the cursor in the API filter. Either
+  // brings the sidebar back if it was hidden.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const digit = /^Digit([1-4])$/.exec(event.code)?.[1];
+      if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && digit) {
+        event.preventDefault();
+        onCollapse(false);
+        setPanel((["api", "flows", "collections", "history"] as Panel[])[Number(digit) - 1]!);
+      } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === "KeyF") {
+        event.preventDefault();
+        onCollapse(false);
+        setPanel("api");
+        // The input exists once the panel has rendered.
+        setTimeout(() => document.querySelector<HTMLInputElement>("[data-endpoint-filter]")?.select(), 0);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCollapse]);
 
   function toggleTheme() {
     const next: Theme = theme === "dark" ? "light" : "dark";
@@ -142,9 +166,16 @@ export function Sidebar({
           </span>
         )}
         <button
+          onClick={onShortcuts}
+          title="Keyboard shortcuts (Ctrl+/)"
+          className="mt-auto rounded px-1.5 py-1 text-muted transition hover:bg-raised hover:text-ink"
+        >
+          ⌨
+        </button>
+        <button
           onClick={toggleTheme}
           title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-          className="mt-auto rounded px-1.5 py-1 text-muted transition hover:bg-raised hover:text-ink"
+          className="rounded px-1.5 py-1 text-muted transition hover:bg-raised hover:text-ink"
         >
           {theme === "dark" ? "☀" : "☾"}
         </button>
@@ -240,6 +271,7 @@ export function Sidebar({
           <button
             key={name}
             onClick={() => setPanel(name)}
+            title={`Alt+${["api", "flows", "collections", "history"].indexOf(name) + 1}`}
             className={`relative flex-1 py-2 capitalize transition
               ${panel === name ? "text-ink" : "text-muted hover:text-ink"}`}
           >
@@ -337,6 +369,13 @@ export function Sidebar({
           className="flex-1 rounded bg-raised px-3 py-1.5 transition hover:brightness-125 disabled:opacity-40"
         >
           Import…
+        </button>
+        <button
+          onClick={onShortcuts}
+          title="Keyboard shortcuts (Ctrl+/)"
+          className="shrink-0 rounded bg-raised px-3 py-1.5 text-muted transition hover:brightness-125 hover:text-ink"
+        >
+          ⌨
         </button>
         <button
           onClick={toggleTheme}

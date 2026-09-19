@@ -106,10 +106,8 @@ export function asCurl(request: PreparedRequest, shell: "bash" | "cmd"): string 
  * switches to `$'…'`, where they can be spelt out.
  */
 export function quoteBash(s: string): string {
-  // eslint-disable-next-line no-control-regex
   if (/[\x00-\x08\x0b-\x1f\x7f]/.test(s)) {
     const escaped = s.replace(/[\\']/g, "\\$&").replace(
-      // eslint-disable-next-line no-control-regex
       /[\x00-\x1f\x7f]/g,
       (c) =>
         c === "\n" ? "\\n" : c === "\t" ? "\\t" : c === "\r" ? "\\r" : `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`,
@@ -182,7 +180,6 @@ export function asPowerShell(request: PreparedRequest): string {
 export function quotePs(s: string): string {
   return `"${s
     .replace(/[`"$]/g, "`$&")
-    // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x1f\x7f]/g, (c) =>
       c === "\n" ? "`n" : c === "\r" ? "`r" : c === "\t" ? "`t" : `\`u{${c.charCodeAt(0).toString(16)}}`,
     )}"`;
