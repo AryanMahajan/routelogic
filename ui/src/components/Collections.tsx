@@ -21,19 +21,25 @@ export function Collections({
   onOpenRequest: (request: RequestDraft, collection: string) => void;
   onChanged: () => void;
 }) {
+  // A collection starts open and its folders closed: `collapsed` holds closed collections,
+  // `expanded` the folders that have been opened. `toggle` tells them apart by key.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [dragging, setDragging] = useState<Drag | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function toggle(key: string) {
-    setCollapsed((current) => {
+    const flip = (current: Set<string>) => {
       const next = new Set(current);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
-    });
+    };
+    if (key.startsWith("f:")) setExpanded(flip);
+    else setCollapsed(flip);
   }
+  const isOpen = (key: string) => (key.startsWith("f:") ? expanded.has(key) : !collapsed.has(key));
 
   async function run(action: () => Promise<void>) {
     try {
@@ -115,7 +121,7 @@ export function Collections({
           key={collection.name}
           collection={collection}
           collections={collections}
-          collapsed={collapsed}
+          isOpen={isOpen}
           toggle={toggle}
           dragging={dragging}
           over={over}
@@ -174,7 +180,7 @@ function tree(requests: RequestDraft[]): Node {
 function CollectionBlock({
   collection,
   collections,
-  collapsed,
+  isOpen,
   toggle,
   dragging,
   over,
@@ -187,7 +193,7 @@ function CollectionBlock({
 }: {
   collection: Collection;
   collections: Collection[];
-  collapsed: Set<string>;
+  isOpen: (key: string) => boolean;
   toggle: (key: string) => void;
   dragging: Drag | null;
   over: string | null;
@@ -318,7 +324,7 @@ function CollectionBlock({
               <div key={folderKey}>
                 <FolderRow
                   depth={depth}
-                  open={!collapsed.has(folderKey)}
+                  open={isOpen(folderKey)}
                   name={name}
                   count={countRequests(child)}
                   onToggle={() => toggle(folderKey)}
@@ -334,7 +340,7 @@ function CollectionBlock({
                   }}
                   className={isOver ? "bg-accent/15 ring-1 ring-accent" : ""}
                 />
-                {!collapsed.has(folderKey) && renderNode(child, folderPath, depth + 1)}
+                {isOpen(folderKey) && renderNode(child, folderPath, depth + 1)}
               </div>
             );
           })}
@@ -400,7 +406,7 @@ function CollectionBlock({
         className={`rounded ${headerOver ? "bg-accent/15 ring-1 ring-accent" : ""}`}
       >
         <FolderRow
-          open={!collapsed.has(key)}
+          open={isOpen(key)}
           name={collection.name}
           count={collection.requests.length}
           onToggle={() => toggle(key)}
@@ -409,7 +415,7 @@ function CollectionBlock({
         />
       </div>
 
-      {!collapsed.has(key) && (
+      {isOpen(key) && (
         <div>
           {collection.requests.length === 0 && (
             <p className="py-1 pl-9 text-[11px] text-muted">Empty — drop a request here.</p>

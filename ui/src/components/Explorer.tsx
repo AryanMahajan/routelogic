@@ -32,7 +32,9 @@ export function Explorer({
   addingToFlow?: boolean;
 }) {
   const [filter, setFilter] = useState("");
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Groups start closed; a filter opens every group it matched, or the hits would be hidden.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const filtering = filter.trim() !== "";
 
   const groups = useMemo(() => {
     if (!scan) return [];
@@ -58,7 +60,7 @@ export function Explorer({
   }, [scan, filter]);
 
   function toggle(group: string) {
-    setCollapsed((current) => {
+    setExpanded((current) => {
       const next = new Set(current);
       if (next.has(group)) next.delete(group);
       else next.add(group);
@@ -96,8 +98,9 @@ export function Explorer({
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter endpoints…"
+          placeholder="Filter endpoints… (Ctrl+Shift+F)"
           spellCheck={false}
+          data-endpoint-filter
           className="w-full rounded border border-edge bg-ground px-2 py-1 outline-none
             placeholder:text-muted/60 focus:border-accent"
         />
@@ -181,12 +184,12 @@ export function Explorer({
         {groups.map(([group, endpoints]) => (
           <div key={group}>
             <FolderRow
-              open={!collapsed.has(group)}
+              open={filtering || expanded.has(group)}
               name={displayName(group)}
               count={endpoints.length}
               onToggle={() => toggle(group)}
             />
-            {!collapsed.has(group) &&
+            {(filtering || expanded.has(group)) &&
               endpoints.map((endpoint) => (
                 <EndpointRow
                   key={endpoint.id}
