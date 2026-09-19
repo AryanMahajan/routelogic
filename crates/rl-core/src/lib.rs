@@ -55,7 +55,7 @@ pub use error::{CoreError, Result};
 use rl_discovery::enrich::{self, AppTarget, Interpreter, Provenance};
 use rl_discovery::{ProjectContext, ScanResult};
 use rl_flow::{Failure, FlowEvent, FlowRun, NodeResult, Outcome, RunOptions};
-use rl_http::{Exchange, HttpEngine};
+use rl_http::{Exchange, HttpEngine, PreparedRequest};
 use rl_import::{Imported, OpenApiImport};
 use rl_model::{Confidence, EndpointSpec, Flow, Origin, RequestDraft, VariableContext};
 use rl_workspace::{
@@ -912,23 +912,7 @@ impl RouteLogic {
     /// Works without a workspace, in which case there are no variables to resolve and
     /// nothing is written to history.
     pub async fn send(&self, draft: &RequestDraft) -> Result<Exchange> {
-        let variables = match self.workspace.as_ref() {
-            Some(workspace) => workspace.variable_context(self.active_environment.as_deref())?,
-            None => VariableContext::new(),
-        };
-
-        // Undefined variables are reported together, before anything is sent, so the user
-        // fixes them in one pass rather than one failed request at a time.
-        let undefined = draft
-            .variable_references()
-            .into_iter()
-            .filter(|name| !variables.is_defined(name))
-            .collect::<Vec<_>>();
-        if !undefined.is_empty() {
-            return Err(CoreError::UndefinedVariables { names: undefined });
-        }
-
-        let (resolved, _secrets_used) = draft.resolve(&variables)?;
+        let (resolved, variables) = self.resolve(draft)?;
         let outcome = self.engine.execute(&resolved).await;
 
         // History records failures too: "it did not connect" is worth keeping.
@@ -940,6 +924,37 @@ impl RouteLogic {
         }
 
         outcome.map_err(CoreError::from)
+    }
+
+    /// The request as it would go on the wire, for copying as a cURL command, a script
+    /// or a plain URL. Resolves exactly as [`RouteLogic::send`] does, so what is copied is
+    /// what would be sent — secrets included, which is what a copied command is for.
+    pub fn prepare(&self, draft: &RequestDraft) -> Result<PreparedRequest> {
+        let (resolved, _variables) = self.resolve(draft)?;
+        Ok(rl_http::prepare(&resolved)?)
+    }
+
+    /// Resolve every `{{variable}}` against the active environment.
+    ///
+    /// Undefined variables are reported together, before anything is sent, so the user
+    /// fixes them in one pass rather than one failed request at a time.
+    fn resolve(&self, draft: &RequestDraft) -> Result<(RequestDraft, VariableContext)> {
+        let variables = match self.workspace.as_ref() {
+            Some(workspace) => workspace.variable_context(self.active_environment.as_deref())?,
+            None => VariableContext::new(),
+        };
+
+        let undefined = draft
+            .variable_references()
+            .into_iter()
+            .filter(|name| !variables.is_defined(name))
+            .collect::<Vec<_>>();
+        if !undefined.is_empty() {
+            return Err(CoreError::UndefinedVariables { names: undefined });
+        }
+
+        let (resolved, _secrets_used) = draft.resolve(&variables)?;
+        Ok((resolved, variables))
     }
 
     // --- history ------------------------------------------------------------------------

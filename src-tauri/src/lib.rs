@@ -9,7 +9,7 @@
 
 use rl_core::{EnrichProposal, ProjectScan, RouteLogic, SaveAllReport, WorkspaceInfo};
 use rl_flow::{FlowEvent, FlowRun, RunOptions};
-use rl_http::Exchange;
+use rl_http::{Exchange, PreparedRequest};
 use rl_model::{Flow, RequestDraft};
 use rl_workspace::{Collection, Environment, HistoryEntry, WorkspaceKind};
 use serde::Serialize;
@@ -325,6 +325,14 @@ async fn send_request(
     Ok(state.app.lock().await.send(&request).await?)
 }
 
+#[tauri::command]
+async fn prepare_request(
+    state: State<'_, AppState>,
+    request: RequestDraft,
+) -> CommandResult<PreparedRequest> {
+    Ok(state.app.lock().await.prepare(&request)?)
+}
+
 // --- history -----------------------------------------------------------------------------
 
 #[tauri::command]
@@ -442,6 +450,7 @@ pub fn run() {
             revoke_enrich,
             reveal_in_editor,
             send_request,
+            prepare_request,
             history,
             clear_history,
             import_curl,

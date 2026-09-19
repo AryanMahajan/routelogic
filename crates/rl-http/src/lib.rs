@@ -51,8 +51,10 @@
 
 pub mod engine;
 pub mod error;
+pub mod prepare;
 pub mod response;
 
 pub use engine::HttpEngine;
 pub use error::{HttpError, Result};
+pub use prepare::{prepare, PreparedBody, PreparedPart, PreparedRequest};
 pub use response::{Body, Exchange, Hop, Response, SentRequest, Timing, MAX_BODY_PREVIEW};

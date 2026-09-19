@@ -233,7 +233,7 @@ fn body_is_sent(method: &Method, body: &BodyValue) -> bool {
     !body.is_none() && method != Method::HEAD
 }
 
-fn build_url(draft: &RequestDraft) -> Result<Url> {
+pub(crate) fn build_url(draft: &RequestDraft) -> Result<Url> {
     let raw = draft.url_with_path_values();
 
     // A `{placeholder}` left in the URL means a path parameter was never filled. Sending it
@@ -276,7 +276,7 @@ fn find_placeholder(url: &str) -> Option<String> {
     Some(url[start..=end].to_string())
 }
 
-fn build_headers(draft: &RequestDraft) -> Result<HeaderMap> {
+pub(crate) fn build_headers(draft: &RequestDraft) -> Result<HeaderMap> {
     let mut headers = HeaderMap::new();
 
     for row in draft.headers.iter().filter(|r| r.enabled) {
@@ -423,7 +423,7 @@ fn apply_body(
     })
 }
 
-fn header_pairs(headers: &HeaderMap) -> Vec<(String, String)> {
+pub(crate) fn header_pairs(headers: &HeaderMap) -> Vec<(String, String)> {
     headers
         .iter()
         .map(|(name, value)| {
