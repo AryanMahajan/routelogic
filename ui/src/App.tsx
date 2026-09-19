@@ -636,6 +636,8 @@ export default function App() {
                 onSend={() => send(active)}
                 onCurl={(text) => importCurl(active, text)}
                 sending={active.sending}
+                exchange={active.exchange}
+                collection={active.collection}
               />
 
               <ResizeHandle

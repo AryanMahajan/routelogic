@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { AuthConfig, BodyValue, RequestDraft } from "../types";
+import type { AuthConfig, BodyValue, Exchange, RequestDraft } from "../types";
+import { CopyMenu } from "./CopyMenu";
 import { cellClass, keyCellClass, KeyValueEditor, Row, Table } from "./KeyValueEditor";
 import { methodColour } from "./MethodBadge";
 import { VariableInput, VariableTextarea } from "./VariableInput";
@@ -14,6 +15,8 @@ export function RequestEditor({
   onSend,
   onCurl,
   sending,
+  exchange = null,
+  collection = null,
 }: {
   request: RequestDraft;
   onChange: (request: RequestDraft) => void;
@@ -22,6 +25,9 @@ export function RequestEditor({
   /** A cURL command landed in the URL bar; the parent turns it into a request. */
   onCurl?: (text: string) => void;
   sending?: boolean;
+  /** The latest response, for "copy response"; the collection, for "copy all". */
+  exchange?: Exchange | null;
+  collection?: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("params");
 
@@ -90,6 +96,7 @@ export function RequestEditor({
             {sending ? "Sending…" : "Send"}
           </button>
         )}
+        {onSend && <CopyMenu request={request} exchange={exchange} collection={collection} />}
       </div>
 
       {/* Tabs */}

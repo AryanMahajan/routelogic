@@ -6,6 +6,7 @@
  */
 
 import { Channel, invoke } from "@tauri-apps/api/core";
+import type { PreparedRequest } from "./codegen";
 import {
   normalizeFlow,
   normalizeFlowRun,
@@ -151,6 +152,9 @@ export const api = {
     // `redirects` is omitted on the wire when empty — which is every direct response.
     return { ...wire, response: { ...wire.response, redirects: wire.response.redirects ?? [] } };
   },
+
+  /** The request as it would be sent — resolved, auth applied — without sending it. */
+  prepare: (request: RequestDraft) => call<PreparedRequest>("prepare_request", { request }),
 
   // --- history ---
   history: (limit = 50) => call<HistoryEntry[]>("history", { limit }),
