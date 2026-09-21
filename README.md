@@ -1,6 +1,6 @@
 # RouteLogic — API client that discovers endpoints from your source code
 
-**Open a FastAPI, Flask, Django, Express or Next.js project and see every API route it
+**Open a FastAPI, Flask, Django, Express, Next.js or Go project and see every API route it
 serves — then test it. A local-first, open-source API client built in Rust, with codebase-aware route
 discovery instead of hand-configured collections.**
 
@@ -74,9 +74,11 @@ project have?"* to *"I can see it, understand it, and test it."*
 
 - **Route discovery** for **FastAPI**, **Flask** (blueprints, `MethodView`, Flask-RESTful
   and RESTX), **Django + DRF** (`urlpatterns`, `include()`, class-based views, ViewSets and
-  routers), **Express** (CommonJS and ESM, nested routers, `.route()` chains) and
-  **Next.js** (App Router route handlers and `pages/api`), across files, following imports,
-  re-exports and `include_router` / `register_blueprint` / `include()` / `app.use` prefixes.
+  routers), **Express** (CommonJS and ESM, nested routers, `.route()` chains),
+  **Next.js** (App Router route handlers and `pages/api`) and **Go** (net/http, Gin, Echo,
+  chi, Fiber, gorilla/mux — groups, `Route` closures, `Mount`, `StripPrefix`, routers
+  handed to functions or returned from them), across files, following imports, re-exports
+  and `include_router` / `register_blueprint` / `include()` / `app.use` / `Group` prefixes.
 - **Honest gaps**: a prefix read from an environment variable shows as `/?/…`, a router
   nobody mounts is flagged as an orphan, a router built by a factory is reported rather than
   dropped.
@@ -106,9 +108,10 @@ project have?"* to *"I can see it, understand it, and test it."*
   headers and body, run the whole thing and read the failure path off the graph — then jump
   from the failing card to the handler in your editor. Saved with the project.
 
-Verified by 460+ tests, including fixture projects per framework whose snapshots record
-**expected misses** as well as hits, a run against the `expressjs/express` repository
-itself, and an end-to-end runtime-enrich pass over a real Flask application.
+Verified by 570+ tests, including fixture projects per framework whose snapshots record
+**expected misses** as well as hits, runs against the `expressjs/express` repository,
+chi's examples, Echo's cookbook and Fiber's recipes, and an end-to-end runtime-enrich pass
+over a real Flask application.
 
 ## Flows: multi-step API tests on a canvas
 
@@ -166,6 +169,7 @@ that flow as a file.
 | [Next.js](docs/discovery/frameworks.md#nextjs)   | TS/JS  | ✅ Implemented | App Router + legacy `pages/api`, dynamic and catch-all segments |
 | [Flask](docs/discovery/frameworks.md#flask)      | Python | ✅ Implemented | Blueprints (nested, re-registered), `MethodView`, Flask-RESTful / RESTX, `add_url_rule` |
 | [Django / DRF](docs/discovery/frameworks.md#django--drf) | Python | ✅ Implemented | `urlpatterns`, `include()`, `re_path`, class-based views, ViewSets, `DefaultRouter`, `@action` |
+| [Go](docs/discovery/frameworks.md#go) | Go | ✅ Implemented | net/http (Go 1.22 patterns), Gin, Echo, chi, Fiber, gorilla/mux; package-scoped names, routers passed to or returned from functions, `Mount`, `StripPrefix`, struct `json` tags as bodies |
 
 Discovery is static by default — RouteLogic reads your code and never executes it. For the
 Python frameworks, an opt-in [runtime enrich](docs/discovery/runtime-enrich.md) step imports
@@ -215,8 +219,8 @@ npm run tauri dev
 ```
 
 The first build compiles the Rust core and takes a few minutes; after that it is seconds.
-Open any of **`tests/fixtures/{fastapi,flask,django,express,nextjs}`** for a project with
-every kind of route, gap and orphan in it. The Python ones run
+Open any of **`tests/fixtures/{fastapi,flask,django,express,nextjs,go,go-chi}`** for a
+project with every kind of route, gap and orphan in it. The Python ones run
 (`pip install -r requirements.txt`), so you can send the requests and try **Ask the app**.
 
 ## How discovery works, in three sentences
@@ -266,7 +270,7 @@ Start at **[docs/](docs/)**.
 ## Tech
 
 Rust core in a Cargo workspace · Tauri v2 desktop shell · React 18 + TypeScript + Tailwind
-UI · tree-sitter parsing for Python, JavaScript and TypeScript · reqwest · SQLite history.
+UI · tree-sitter parsing for Python, JavaScript, TypeScript and Go · reqwest · SQLite history.
 
 ## FAQ
 
@@ -277,8 +281,9 @@ remembers the decision per project until you withdraw it.
 **Is it a Postman alternative?** For testing the API of a codebase you have in front of you,
 yes. It is not trying to replace team collaboration features, mock servers or monitoring.
 
-**Which frameworks are supported?** FastAPI, Flask, Django (with DRF), Express and Next.js.
-See [framework support](docs/discovery/frameworks.md).
+**Which frameworks are supported?** FastAPI, Flask, Django (with DRF), Express, Next.js,
+and Go with net/http, Gin, Echo, chi, Fiber or gorilla/mux. See
+[framework support](docs/discovery/frameworks.md).
 
 **Where are my secrets stored?** Outside the committed workspace, in a private local store.
 Environment files reference them by name only. See [security](docs/security.md).

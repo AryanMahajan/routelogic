@@ -117,6 +117,17 @@ that router at the rule. The class in `views.py` and its registration in `__init
 then linked by the import, like any blueprint, and `methods=["GET"]` on the rule is the
 mount's method filter. No new concept was needed.
 
+Go uses the same trick for functions: `func Register(rg *gin.RouterGroup)` is a router
+whose routes are registered on its parameter, and `users.Register(v1.Group("/users"))` is
+the mount — as is `r.Mount("/tags", tags.Routes())` for a function that *returns* a
+router it built. Since a Go name is scoped to the package rather than the file, the
+graph resolves a reference through the package directory, and follows two aliases the
+adapter records as exports: a constructor stands for the type it returns
+(`NewHandler(db).Routes()` is `Handler.Routes`), and a type stands for the router its
+`ServeHTTP` delegates to (`http.ListenAndServe(":3000", srv)` reaches `Server.router`).
+One adapter covers net/http, Gin, Echo, chi, Fiber and gorilla/mux, because a Go project
+mixes them and they differ only in method names.
+
 Django goes one step further: *every* view function and class is an implicit router, and
 `path("users/", views.list_users)` mounts it. The methods are read where the view is
 declared, across files, and a view nobody routes to is simply never listed. Identical
@@ -127,6 +138,17 @@ The graph reports what it could not do: a mount whose child is declared nowhere 
 project (`UndeclaredMount`), routes on a name that is not a router — typically a function
 parameter (`UndeclaredRouter`, the routes kept as orphans) — and the usual orphans and
 cycles.
+
+### Handlers declared elsewhere
+
+Go keeps `routes.go` and `handler.go` apart as a matter of course, and a route knows its
+handler only by name. The adapter emits a `HandlerFact` — what a handler-shaped function
+reads from its request, keyed by its name — and sets `RouteFact::handler` to the name the
+registration used, normalised (`h.List` on an `h := &Handler{}` becomes `Handler.List`).
+After the graph has resolved paths, `handlers::HandlerIndex` joins the two by package, the
+way `models::ModelIndex` fills in a body that only names its struct. A route registered
+without a method keeps only the methods its handler checks `r.Method` for. Any adapter
+whose handlers live apart from their routes can use the same two facts.
 
 ### Shared helpers
 

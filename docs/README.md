@@ -1,7 +1,8 @@
 # RouteLogic documentation
 
 RouteLogic is a local-first API client that discovers HTTP endpoints from a project's source
-code — FastAPI, Express and Next.js today — and lets you test them immediately. These pages
+code — FastAPI, Flask, Django, Express, Next.js and Go today — and lets you test them
+immediately. These pages
 cover how to run it, how discovery works, what each framework adapter handles and misses,
 and how the workspace is stored.
 
@@ -22,6 +23,7 @@ Implementation is phased so each phase leaves a usable application.
 | P4 | Next.js adapter, then Express adapter | Done |
 | P5 | Runtime enrich, Flask adapter | Done |
 | P6 | Collections & environments UI, Django + DRF | Done (capture rules deferred) |
+| — | Go: net/http, Gin, Echo, chi, Fiber, gorilla/mux | Done |
 
 Live phase tracking, including what slipped and why, lives in `docs/internal/roadmap.md`
 (not committed).

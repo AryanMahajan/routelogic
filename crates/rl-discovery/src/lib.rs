@@ -23,9 +23,9 @@
 //!
 //! [enrich]: https://github.com/AryanMahajan/routelogic/blob/main/docs/discovery/runtime-enrich.md
 //!
-//! Status: P5 complete — FastAPI, Flask, Next.js and Express adapters over one graph, with
-//! Python and JavaScript/TypeScript module resolution, plus opt-in runtime enrich for the
-//! Python frameworks. Django arrives in P6.
+//! Status: FastAPI, Flask, Django, Next.js, Express and Go (net/http, Gin, Echo, chi,
+//! Fiber, gorilla/mux) adapters over one graph, with Python, JavaScript/TypeScript and Go
+//! module resolution, plus opt-in runtime enrich for the Python frameworks.
 
 #![forbid(unsafe_code)]
 

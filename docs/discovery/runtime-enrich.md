@@ -129,7 +129,7 @@ Rescanning returns to the plain static result; enrich is re-run on request.
 
 ## When you do not need it
 
-- The project is Next.js or Express, where there is no runtime spec to fetch and static
+- The project is Next.js, Express or Go, where there is no runtime spec to fetch and static
   analysis is the whole story. The button is not offered.
 - The project is Django with `drf-spectacular`: its generated schema is richer than the
   resolver walk, and importing that document is the better path today.

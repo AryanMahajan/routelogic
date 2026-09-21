@@ -35,8 +35,18 @@ module.exports = router;
 app.use('/api/users', require('./routes/users'));
 ```
 
-In both cases the real path — `/api/v1/users/{user_id}`, `/api/users/:id` — exists in no
-single file. Producing it requires linking a router *declaration* in one module to its
+```go
+// internal/users/routes.go
+func Register(rg *gin.RouterGroup) {
+	rg.GET("/:id", get)
+}
+
+// cmd/server/main.go
+users.Register(r.Group("/api/v1").Group("/users"))
+```
+
+In every case the real path — `/api/v1/users/{user_id}`, `/api/users/:id`,
+`/api/v1/users/{id}` — exists in no single file. Producing it requires linking a router *declaration* in one module to its
 *mount* in another.
 
 That linking is the actual engineering problem in discovery. Everything else is comparatively
@@ -75,6 +85,8 @@ reimplementing prefix resolution.
 | Mount cycle | Cycle broken, warning recorded |
 | Router mounted onto another router, several deep | Prefixes compose in order |
 | Framework with no routers (Next.js) | Adapter emits registrations directly; graph is flat |
+| Routes registered on a function's parameter, or on a router it returns (Go) | The function is the router; the call that hands it one is the mount |
+| Names scoped to a package rather than a file (Go) | References resolve through the directory, then through an imported package |
 
 Orphans matter: a router that is not mounted is very often a bug in the project, and telling
 the developer about it is useful information rather than noise.
@@ -121,7 +133,7 @@ mtime, and content hash. A rescan only reparses what changed, which is what make
 watch-and-refresh experience viable.
 
 **Why tree-sitter** rather than `swc`/`oxc` for JS and `ruff`/`rustpython` for Python: one
-uniform API across Python, JavaScript, TypeScript, and TSX; error-tolerant parsing, so a file
+uniform API across Python, JavaScript, TypeScript, TSX and Go; error-tolerant parsing, so a file
 that does not currently compile still yields routes; and a query language that lets route
 patterns be written declaratively instead of as hand-rolled visitors. The trade-off is that
 tree-sitter provides no name resolution — but that would have been hand-written under any of

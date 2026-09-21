@@ -32,7 +32,8 @@ npm run tauri build                # the same installer the release workflow pro
 ```
 
 The first `dev` compiles the Rust side, which takes a few minutes; afterwards it is seconds.
-The sample projects under `tests/fixtures/` — `fastapi`, `nextjs`, `express` — are the
+The sample projects under `tests/fixtures/` — `fastapi`, `flask`, `django`, `nextjs`,
+`express`, `go`, `go-chi` — are the
 quickest things to open: each contains routes that should be found, deliberate gaps that
 should be *shown* rather than guessed, and an unmounted router that should be flagged.
 

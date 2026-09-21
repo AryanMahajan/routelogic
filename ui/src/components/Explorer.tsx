@@ -176,7 +176,7 @@ export function Explorer({
         {groups.length === 0 && (
           <p className="px-1 py-4 text-muted">
             {scan.endpoints.length === 0
-              ? "No endpoints found. RouteLogic understands FastAPI, Flask, Express and Next.js today."
+              ? "No endpoints found. RouteLogic understands FastAPI, Flask, Django, Express, Next.js and Go (Gin, Echo, chi, Fiber, gorilla/mux, net/http) today."
               : "Nothing matches that filter."}
           </p>
         )}

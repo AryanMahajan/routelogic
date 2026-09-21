@@ -11,6 +11,7 @@ whose snapshot records what is found **and what is expected not to be**.
 | Express | JS/TS | P4 | Implemented |
 | Flask | Python | P5 | Implemented |
 | Django / DRF | Python | P6 | Implemented |
+| Go — net/http, Gin, Echo, chi, Fiber, gorilla/mux | Go | — | Implemented |
 
 Every adapter shares the same limits, which come from static analysis itself rather than
 from any one framework:
@@ -20,9 +21,10 @@ from any one framework:
 - **Routers built inside functions** are found, but the mount that would place them is
   not: they appear as orphans with a warning naming the call that builds them.
 - **Handlers are inspected only within the file that registers them.** A controller
-  defined elsewhere contributes no parameters. (Flask's class-based views are the
-  exception: a `MethodView` is a router in its own right, so its methods are read where
-  the class is declared.)
+  defined elsewhere contributes no parameters. (Two exceptions: Flask's class-based views,
+  where a `MethodView` is a router in its own right and its methods are read where the
+  class is declared; and Go, where a handler named by a route is looked up by name across
+  the package.)
 - **Routes registered on a function parameter** — `def register(app): app.add_url_rule(…)`
   — are kept as orphans with a warning, because where that `app` is mounted cannot be
   known.
@@ -273,3 +275,105 @@ walks the URL resolver: exact paths, ViewSet action maps, class-based view metho
 `require_http_methods` read through its closure. A plain function view is listed as GET
 with `x-methods-unknown`, so the static scan's `POST` on it survives the merge rather than
 being marked "not served".
+
+---
+
+## Go
+
+**Detected by** `github.com/gin-gonic/gin`, `github.com/labstack/echo`,
+`github.com/go-chi/chi`, `github.com/gofiber/fiber` or `github.com/gorilla/mux` in any
+`go.mod` (+1 each) or imported in source (+3 each), and a `http.HandleFunc` /
+`http.Handle` / `http.NewServeMux` call anywhere (+3), since every Go program imports
+`net/http`. Reported as one framework, `go`, with the evidence naming which of the six.
+
+Pinned by two fixtures. `tests/fixtures/go/` is a Gin shop in the usual layout — `main`
+builds the engine and the groups, each `internal/<area>` package registers on the group
+it is handed, handlers in a file of their own — with a package mounted under two
+prefixes, a `Register` nobody calls, a prefix read from configuration, and a route
+registered with a method held in a variable. `tests/fixtures/go-chi/` is a chi notes API:
+a `Server` type serving its router from `ServeHTTP`, resources returning routers from
+`Routes()`, `Route` closures, `Mount`s that reach another package through a constructor,
+a Go 1.22 `ServeMux` behind `http.StripPrefix`, a `ServeMux` nothing serves, a prefix
+from the environment, and a table-driven registration.
+
+**How it maps onto the graph.** One adapter for all six, because a project mixes them
+and they differ only in method names. A Go name is scoped to the *package*, so the graph
+resolves a reference through the directory: `r` in `routes.go` is the `r` declared in
+`main.go` next to it, and `users.Register` is `Register` wherever `users` was imported
+from (through `go.mod`'s module path — one per service in a monorepo). A function whose
+parameter is a router, or which returns one it built, *is* a router; `Register(v1)` and
+`r.Mount("/x", Routes())` are its mounts. A constructor stands for the type it returns
+and a type for the router its `ServeHTTP` delegates to, so
+`http.ListenAndServe(":3000", api.NewServer(db))` is followed to `Server.router`. A
+router built with `chi.NewRouter()` or `http.NewServeMux()` is a root only once
+something serves it; one built with `gin.Default()`, `echo.New()` or `fiber.New()` is a
+root by construction, unless it is mounted into another. Handlers are recorded by name
+where they are declared and joined to routes afterwards, so `routes.go` + `handler.go`
+works.
+
+**Recognised**
+
+- Constructors: `gin.Default()`, `gin.New()`, `echo.New()`, `chi.NewRouter()`,
+  `chi.NewMux()`, `fiber.New()`, `mux.NewRouter()`, `http.NewServeMux()`; the default mux
+  through `http.HandleFunc` / `http.Handle`; `var r = …` at package level or `:=` in a
+  function; `s.router = …` and `&Server{router: …}` on a type
+- Routes: `GET`/`POST`/… (Gin, Echo, Fiber), `Get`/`Post`/… (chi, Fiber), `Any`, `All`,
+  `Handle("GET", path, h)` (Gin), `Handle(path, h)` and `HandleFunc(path, h)` (net/http,
+  chi, gorilla), `Method`/`MethodFunc` (chi), `Add` (Echo, Fiber), `Match([]string{…},
+  path, h)` (Echo); gorilla chains `HandleFunc(p, h).Methods(…)`,
+  `Path(p).Queries(…).HandlerFunc(h)`, `Methods(…).Path(p).Handler(h)`
+- Groups and mounts: `Group(prefix, mw…)` assigned, inline (`r.Group("/v1").GET(…)`) or
+  as an argument (`Register(r.Group("/users"))`); chi's `Route(prefix, func(r chi.Router))`
+  and `Group(func(r chi.Router))`, Fiber's `Route`; `With(mw)`; `Mount(prefix, x)`;
+  Fiber's `Use(prefix, sub)` and `Use(sub)`; `PathPrefix(p).Subrouter()` and
+  `Methods(…).Subrouter()`; `Handle("/api/", http.StripPrefix("/api", mux))`; the same
+  router mounted at two prefixes
+- Roots: `r.Run()`, `e.Start()`, `app.Listen()`, `app.Listener()`,
+  `http.ListenAndServe(addr, r)`, `http.Serve(l, r)`, `&http.Server{Handler: r}`,
+  `srv.Handler = r`, and a serve call into outside code (`endless.ListenAndServe(":8080",
+  r)`, Echo v5's `StartConfig.Start(ctx, e)`)
+- Paths in every syntax: `{id}`, `{id:[0-9]+}` (regex dropped), `{path...}`, `{$}`,
+  `:id`, `:id?`, `:id<int>`, `*`, `*name`, `+`; net/http's `"GET /items/{id}"` and
+  host-rooted patterns; constants folded through `const`, `var` and `+`; `""` and `"/"`
+  under a Gin group kept as two routes
+- Bodies: `ShouldBindJSON(&x)`, `BindJSON`, `ShouldBind`, `Bind`, `BodyParser`,
+  `json.NewDecoder(r.Body).Decode(&x)`, `render.DecodeJSON`, `json.Unmarshal` — the
+  struct named by `x`, with its `json:"…"` tags as fields (`json:"-"` and unexported
+  fields left out, `binding:"required"` / `validate:"required"` as required), embedded
+  structs flattened, `time.Time`, `uuid.UUID`, slices and maps typed; `PostForm` /
+  `FormValue` as a form body, `FormFile` as multipart
+- Query from `c.Query`, `DefaultQuery`, `QueryParam`, `r.URL.Query().Get`, a `q :=
+  r.URL.Query()` local, `ShouldBindQuery(&x)` through the struct's `form` tags;
+  headers from `GetHeader`, `r.Header.Get`, Fiber's `c.Get("X-…")`; `Authorization`
+  promoted to an auth requirement
+- A route registered without a method (`HandleFunc`, `Handle`, chi's `HandleFunc`,
+  gorilla without `Methods`) keeps the methods its handler checks `r.Method` against
+  (`==`, `!=`, `switch`), else is listed under GET/POST/PUT/PATCH/DELETE with a summary
+- Auth from middleware names in the chain, on a group, in `With(…)`, in `Use(…)` for the
+  routes after it, or on a mount: `AuthRequired()`, `middleware.JWT(…)`,
+  `jwtauth.Verifier(…)`, `middleware.BasicAuth(…)`, `gin.BasicAuth(…)`
+- Groups for the tree from the file (`users.go`, or `routes/users/router.go`'s
+  directory), the group's prefix (`/api/v1/users` → `users`), or the function
+  (`RegisterUserRoutes`, `usersResource.Routes`)
+- The port from the listen address in source — `":8080"`, `"0.0.0.0:8080"`, a constant,
+  `http.Server{Addr:}`, `echo.StartConfig{Address:}` — else Gin's 8080 on a bare `Run()`,
+  else 8080
+
+**Gaps**
+
+- A path or prefix from `os.Getenv`, `viper`, a config struct or `fmt.Sprintf` is shown
+  unresolved. A method held in a variable — `Handle(method, path, h)` — is skipped.
+  Registrations in a loop over a table are missed; over a slice of literals they are
+  listed with the path unresolved.
+- A router reached only through an interface, dependency injection (`fx`, `wire`,
+  `parsley`) or a cloud-function adaptor is reported as never mounted: the routes are
+  listed and flagged, the wiring is not followed.
+- Handlers are found by name in the route's own package, then anywhere the name is
+  unique; a handler behind an interface or a method value on an unknown type contributes
+  nothing.
+- `Static`, `StaticFS`, `http.FileServer` are not listed.
+- The default `ServeMux` is taken as served; `http.HandleFunc` in a file that never
+  calls `http.ListenAndServe(…, nil)` still lists its routes.
+- Struct fields of types from other packages are named, not described; an `any` field
+  is `null`.
+- Echo's `c.Bind` reads query and path as well as the body; it is taken as a body.
