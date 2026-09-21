@@ -97,6 +97,7 @@ const SERVE_METHODS: &[&str] = &[
     "ListenTLS",
     "ListenAndServe",
     "ListenAndServeTLS",
+    "Listener",
     "Serve",
     "ServeTLS",
 ];
@@ -147,9 +148,21 @@ impl Flavour {
         if path == "net/http" {
             return Some(Flavour::Http);
         }
+        // The package itself, under whatever major version — not `gin/binding` or
+        // `chi/v5/middleware`, whose `Default` and `New` build other things.
+        let unversioned = match path.rsplit_once('/') {
+            Some((head, tail))
+                if tail.len() > 1
+                    && tail.starts_with('v')
+                    && tail[1..].chars().all(|c| c.is_ascii_digit()) =>
+            {
+                head
+            }
+            _ => path,
+        };
         FRAMEWORKS
             .iter()
-            .find(|(_, prefix)| path == *prefix || path.starts_with(&format!("{prefix}/")))
+            .find(|(_, prefix)| unversioned == *prefix)
             .map(|(id, _)| match *id {
                 "gin" => Flavour::Gin,
                 "echo" => Flavour::Echo,
@@ -192,9 +205,21 @@ impl Flavour {
 
 #[derive(Default)]
 pub struct GoAdapter {
-    /// The `module` line of `go.mod`, read by `detect`, so an import of the project's own
+    /// Every `go.mod` in the project — a monorepo has one per service — as (directory,
+    /// module path), deepest first. Read by `detect`, so an import of the project's own
     /// packages can be told from everything else.
-    module_path: RefCell<Option<String>>,
+    modules: RefCell<Vec<(PathBuf, String)>>,
+}
+
+impl GoAdapter {
+    /// The module a file belongs to: the nearest `go.mod` above it, and its directory.
+    fn module_of(&self, file: &Path) -> Option<(PathBuf, String)> {
+        self.modules
+            .borrow()
+            .iter()
+            .find(|(dir, _)| file.starts_with(dir))
+            .cloned()
+    }
 }
 
 impl FrameworkAdapter for GoAdapter {
@@ -209,14 +234,32 @@ impl FrameworkAdapter for GoAdapter {
     fn detect(&self, project: &ProjectContext) -> Detection {
         let mut detection = Detection::none();
 
-        if let Some(text) = project.manifest("go.mod") {
-            *self.module_path.borrow_mut() = module_path(text);
-            for (id, path) in FRAMEWORKS {
-                if text.lines().any(|line| line.trim().contains(path)) {
-                    detection.add(1, format!("`{path}` is required in go.mod ({id})"));
+        let mut modules = Vec::new();
+        for path in project.files() {
+            if path.file_name().and_then(|n| n.to_str()) != Some("go.mod") {
+                continue;
+            }
+            let Ok(text) = project.read(path) else {
+                continue;
+            };
+            if let Some(module) = module_path(&text) {
+                let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+                modules.push((dir, module));
+            }
+            for (id, framework) in FRAMEWORKS {
+                if text.lines().any(|line| line.trim().contains(framework)) {
+                    detection.add(
+                        1,
+                        format!(
+                            "`{framework}` is required in {} ({id})",
+                            crate::project::display(path)
+                        ),
+                    );
                 }
             }
         }
+        modules.sort_by_key(|(dir, _)| std::cmp::Reverse(dir.components().count()));
+        *self.modules.borrow_mut() = modules;
 
         // An actual import is much stronger evidence than a manifest entry, and a
         // registration call is the only evidence net/http can give.
@@ -273,8 +316,8 @@ impl FrameworkAdapter for GoAdapter {
     }
 
     fn extract(&self, file: &ParsedFile, sink: &mut FactSink) {
-        let module_path = self.module_path.borrow().clone();
-        Extractor::new(file, module_path, sink).file();
+        let module = self.module_of(&file.path);
+        Extractor::new(file, module, sink).file();
     }
 }
 
@@ -299,12 +342,16 @@ struct RouterExpr {
     flavour: Flavour,
     /// Guards accumulated on the way — `r.With(requireAuth)`.
     auth: Option<AuthRequirement>,
-    /// Known to be a router: declared here, a typed parameter, a field of the receiver, a
-    /// name from a project package, or a value a known constructor produced. A bare
+    /// Plausibly a router: declared here, a typed parameter, a field of the receiver, a
+    /// name from a project package, or what a call into the project returned. A bare
     /// identifier declared nowhere in the file is not — it may well be a router from the
     /// file next door, so routes on it are still reported, but it is not served or
     /// mounted on the strength of a name alone.
     trusted: bool,
+    /// Known to be a router — declared or typed as one here. Only these make a plain
+    /// function call a mount: `setup(r)` is one when `r` is the engine, and not when it
+    /// is whatever `common.Init()` returned.
+    declared: bool,
 }
 
 /// A router declared in this file, emitted once the whole file has been read — a serve
@@ -357,7 +404,8 @@ struct Scope {
 
 struct Extractor<'s, 'f> {
     file: &'f ParsedFile,
-    module_path: Option<String>,
+    /// The directory of the `go.mod` this file falls under, and its module path.
+    module: Option<(PathBuf, String)>,
     sink: &'s mut FactSink,
     /// Import local name → flavour, for `gin.Default()` under whatever alias.
     packages: BTreeMap<String, Flavour>,
@@ -373,6 +421,8 @@ struct Extractor<'s, 'f> {
     structs: BTreeMap<String, Vec<StructField>>,
     /// Top-level function names in this file.
     function_names: BTreeSet<String>,
+    /// Types in this file that embed a router or serve one from `ServeHTTP`.
+    router_types: BTreeSet<String>,
     declared: Vec<Declared>,
     functions: Vec<FunctionRouter>,
     /// `r.Use(requireAuth)` applies to every route registered on `r` afterwards.
@@ -395,10 +445,14 @@ struct StructField {
 }
 
 impl<'s, 'f> Extractor<'s, 'f> {
-    fn new(file: &'f ParsedFile, module_path: Option<String>, sink: &'s mut FactSink) -> Self {
+    fn new(
+        file: &'f ParsedFile,
+        module: Option<(PathBuf, String)>,
+        sink: &'s mut FactSink,
+    ) -> Self {
         Extractor {
             file,
-            module_path,
+            module,
             sink,
             packages: BTreeMap::new(),
             externals: BTreeSet::new(),
@@ -407,6 +461,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
             package_routers: BTreeMap::new(),
             structs: BTreeMap::new(),
             function_names: BTreeSet::new(),
+            router_types: BTreeSet::new(),
             declared: Vec::new(),
             functions: Vec::new(),
             router_auth: BTreeMap::new(),
@@ -523,12 +578,20 @@ impl<'s, 'f> Extractor<'s, 'f> {
                 .child_by_field_name("name")
                 .map(|n| self.text(n).to_string())
                 .filter(|n| n != "_" && n != ".");
-            let inside = self.module_path.as_deref().and_then(|module| {
-                if path == module {
+            // Inside this module: the package directory, relative to the project root —
+            // the module's own directory is not the root in a monorepo.
+            let inside = self.module.as_ref().and_then(|(dir, module)| {
+                let rest = if path == *module {
                     Some(String::new())
                 } else {
                     path.strip_prefix(&format!("{module}/")).map(str::to_string)
-                }
+                }?;
+                let dir = crate::project::display(dir);
+                Some(match (dir.as_str(), rest.as_str()) {
+                    ("", rest) => rest.to_string(),
+                    (dir, "") => dir.to_string(),
+                    (dir, rest) => format!("{dir}/{rest}"),
+                })
             });
             // A `/v2` on a module path is its major version, not its name; a `v2`
             // directory inside this project is just a directory.
@@ -704,6 +767,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
                         .and_then(|p| self.packages.get(p))
                         .is_some_and(|flavour| flavour.is_router_type(base));
                     if embeds_router {
+                        self.router_types.insert(name.clone());
                         self.sink.export(ExportFact {
                             module: self.module(),
                             exported: name.clone(),
@@ -821,6 +885,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
         // type serves its router.
         if method == "ServeHTTP" {
             if let Some(field) = self.serve_http_delegate(node, &receiver_name) {
+                self.router_types.insert(receiver_type.clone());
                 self.sink.export(ExportFact {
                     module: self.module(),
                     exported: receiver_type.clone(),
@@ -882,7 +947,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
             return;
         };
         let (package, base) = split_qualified(self.text(first));
-        if package.is_some() || !self.structs.contains_key(base) {
+        if package.is_some() || !base.starts_with(|c: char| c.is_ascii_uppercase()) {
             return; // a framework type, a builtin, an error
         }
         self.sink.export(ExportFact {
@@ -916,6 +981,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
                                 flavour,
                                 auth: None,
                                 trusted: true,
+                                declared: true,
                             },
                         );
                     }
@@ -1059,6 +1125,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
                         flavour,
                         auth: None,
                         trusted: true,
+                        declared: true,
                     },
                 );
             }
@@ -1163,6 +1230,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
                             flavour: parent.flavour,
                             auth: None,
                             trusted: true,
+                            declared: true,
                         },
                     );
                     return;
@@ -1207,6 +1275,17 @@ impl<'s, 'f> Extractor<'s, 'f> {
                     scope.aliases.insert(target, alias);
                 }
             }
+            "selector_expression" => {
+                // `app := appConfig.App`: a field of something the project built, which
+                // the graph can follow through the constructor to `AppConfig.App`.
+                if let Some(router) = self.router_of(scope, value).filter(|r| r.trusted) {
+                    scope.routers.insert(target, router);
+                } else if let Some(name) = self.qualifier(scope, value) {
+                    if self.is_project_name(&name) {
+                        scope.aliases.insert(target, (name, true));
+                    }
+                }
+            }
             _ => {
                 if let Some(text) = self.string_value(scope, value) {
                     scope.constants.insert(target, text);
@@ -1245,6 +1324,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
                         flavour,
                         auth: None,
                         trusted: true,
+                        declared: true,
                     },
                 );
                 return;
@@ -1266,6 +1346,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
             flavour,
             auth: None,
             trusted: true,
+            declared: true,
         };
         if scope.function.is_some() || local.contains('.') {
             scope.routers.insert(local.to_string(), router);
@@ -1301,8 +1382,8 @@ impl<'s, 'f> Extractor<'s, 'f> {
     )> {
         let (root, pieces) = chain(self.file, call);
         let root = self.router_of(scope, root?)?;
-        if !root.trusted {
-            return None;
+        if !root.declared {
+            return None; // GORM has a `.Group(column)` too
         }
         let mut prefix = PathTemplate::empty();
         let mut auth = None;
@@ -1369,18 +1450,22 @@ impl<'s, 'f> Extractor<'s, 'f> {
                         flavour: Flavour::Unknown,
                         auth: None,
                         trusted: true,
+                        declared: false,
                     });
                 }
                 if self.packages.get(name) == Some(&Flavour::Http) {
                     return Some(self.default_mux(node));
                 }
+                // The receiver itself, `s.Get(...)`: a router when its type embeds one.
                 if let Some((receiver, ty)) = &scope.receiver {
                     if receiver == name {
+                        let known = self.router_types.contains(ty) || looks_like_router(ty);
                         return Some(RouterExpr {
                             name: ty.clone(),
                             flavour: Flavour::Unknown,
                             auth: None,
-                            trusted: true,
+                            trusted: known,
+                            declared: known,
                         });
                     }
                 }
@@ -1396,11 +1481,13 @@ impl<'s, 'f> Extractor<'s, 'f> {
                     return None;
                 }
                 // Not declared here: a package-level router in a sibling file, or nothing.
+                let known = looks_like_router(name);
                 Some(RouterExpr {
                     name: name.to_string(),
                     flavour: Flavour::Unknown,
                     auth: None,
-                    trusted: looks_like_router(name),
+                    trusted: known,
+                    declared: known,
                 })
             }
             "selector_expression" => {
@@ -1430,19 +1517,26 @@ impl<'s, 'f> Extractor<'s, 'f> {
                             flavour: Flavour::Unknown,
                             auth: None,
                             trusted: true,
+                            declared: looks_like_router(field),
                         });
                     }
-                    // `s.router`, on the receiver or a local of known type.
+                    // `s.router`, on the receiver or a local of known type — when the
+                    // field is declared as a router here, or is called one.
                     if let Some(ty) = self.type_of(scope, operand) {
                         let (package, base) = split_qualified(&ty);
                         if package.is_some() {
                             return None; // a field of `http.Server`, `sql.DB`
                         }
+                        let name = format!("{base}.{field}");
+                        let known = looks_like_router(field)
+                            || self.declared.iter().any(|d| d.symbol == name)
+                            || scope.routers.contains_key(&name);
                         return Some(RouterExpr {
-                            name: format!("{base}.{field}"),
+                            name,
                             flavour: Flavour::Unknown,
                             auth: None,
-                            trusted: true,
+                            trusted: known,
+                            declared: known,
                         });
                     }
                 }
@@ -1534,6 +1628,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
             flavour: Flavour::Http,
             auth: None,
             trusted: true,
+            declared: true,
         }
     }
 
@@ -1573,6 +1668,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
             flavour: parent.flavour,
             auth: None,
             trusted: true,
+            declared: true,
         }
     }
 
@@ -1640,6 +1736,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
             flavour: Flavour::Unknown,
             auth: None,
             trusted: true,
+            declared: false,
         })
     }
 
@@ -1668,6 +1765,10 @@ impl<'s, 'f> Extractor<'s, 'f> {
             };
             let key = self.text(key).to_string();
             let value = named_children(value).into_iter().next().unwrap_or(value);
+            if !is_server && package.is_some() && matches!(key.as_str(), "Addr" | "Address") {
+                self.listen_port(scope, value); // `echo.StartConfig{Address: ":1323"}`
+                continue;
+            }
             if is_server {
                 match key.as_str() {
                     "Handler" => {
@@ -1694,6 +1795,16 @@ impl<'s, 'f> Extractor<'s, 'f> {
                         false,
                         self.span(node),
                     );
+                    continue;
+                }
+                // `&AppConfig{App: app}` where `app := fiber.New()`: the field stands for
+                // the router, so `cfg.App` from another file reaches it.
+                if let Some(router) = self.router_of(scope, value).filter(|r| r.declared) {
+                    self.sink.export(ExportFact {
+                        module: self.module(),
+                        exported: format!("{base}.{key}"),
+                        local: router.name,
+                    });
                 }
             }
         }
@@ -1749,7 +1860,49 @@ impl<'s, 'f> Extractor<'s, 'f> {
             }
         }
 
-        let router = root.and_then(|r| self.router_of(scope, r));
+        let mut router = root.and_then(|r| self.router_of(scope, r));
+
+        // `app := setup(); app.Use(...); routes.Register(app)`: what came back from the
+        // call is only plausibly a router until it is used as one, and from then on it is
+        // known to be — so the `Register(app)` after it is a mount.
+        if let (Some(root_node), Some(found)) = (root, &router) {
+            let local = self.text(root_node);
+            if root_node.kind() == "identifier"
+                && found.trusted
+                && !found.declared
+                && pieces.iter().any(|(name, _)| {
+                    is_routing_piece(name)
+                        && (usual_router_name(local) || is_unmistakable_piece(name))
+                })
+            {
+                let known = RouterExpr {
+                    declared: true,
+                    ..found.clone()
+                };
+                scope
+                    .routers
+                    .insert(self.text(root_node).to_string(), known.clone());
+                router = Some(known);
+            }
+        }
+
+        // A serve call that is not the router's own: `endless.ListenAndServe(":8080", r)`,
+        // `graceful.Run(":8080", timeout, r)`, Echo v5's `sc.Start(ctx, e)`.
+        if router.is_none() && pieces.len() == 1 && SERVE_METHODS.contains(&pieces[0].0.as_str()) {
+            let args = arguments(pieces[0].1);
+            let served = args
+                .iter()
+                .find_map(|arg| self.router_of(scope, *arg).filter(|r| r.declared));
+            if let Some(served) = served {
+                for arg in &args {
+                    if self.listen_port(scope, *arg).is_some() {
+                        break;
+                    }
+                }
+                self.mark_root(served, self.span(node));
+                return;
+            }
+        }
 
         // A function handed a router is a mount of that function — and so is a method
         // on something that only *might* be a router, `h := handlers.New(db); h.Mount(r)`.
@@ -1765,7 +1918,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
                 None
             } else {
                 args.iter()
-                    .find_map(|arg| self.router_of(scope, *arg).filter(|r| r.trusted))
+                    .find_map(|arg| self.router_of(scope, *arg).filter(|r| r.declared))
             };
             if let Some(parent) = parent {
                 if let Some(child) = self.callee_name(scope, *call) {
@@ -1777,8 +1930,12 @@ impl<'s, 'f> Extractor<'s, 'f> {
             }
         }
 
+        // On something only plausibly a router, an ambiguous chain — GORM's
+        // `db.Where(...).Group("col").Find(...)` — is left alone.
         if let Some(router) = router {
-            self.pieces(scope, router, &pieces, node);
+            if router.declared || pieces.iter().any(|(name, _)| is_unmistakable_piece(name)) {
+                self.pieces(scope, router, &pieces, node);
+            }
         }
     }
 
@@ -1844,9 +2001,18 @@ impl<'s, 'f> Extractor<'s, 'f> {
 
             match name {
                 "Any" | "All" => {
+                    // `cursor.All(ctx, &out)` is not a route; on an unknown receiver only
+                    // a literal path says it is.
+                    let literal = args.first().is_some_and(|f| {
+                        matches!(
+                            unwrap(*f).kind(),
+                            "interpreted_string_literal" | "raw_string_literal"
+                        )
+                    });
                     if args
                         .first()
-                        .is_some_and(|f| self.is_path_argument(scope, *f, true))
+                        .is_some_and(|f| self.is_path_argument(scope, *f, current.trusted))
+                        && (current.trusted || literal)
                     {
                         let path = self.path_of(scope, args[0]);
                         self.route(
@@ -2000,7 +2166,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
                 "Use" => {
                     // Fiber: `app.Use("/api", sub)` mounts; otherwise middleware.
                     if args.len() >= 2 && self.is_path_argument(scope, args[0], false) {
-                        if let Some(child) = self.router_of(scope, args[1]).filter(|r| r.trusted) {
+                        if let Some(child) = self.router_of(scope, args[1]).filter(|r| r.declared) {
                             let prefix = self.path_of(scope, args[0]);
                             self.mount(scope, &current, child.name, prefix, None, *call);
                             continue;
@@ -2014,8 +2180,9 @@ impl<'s, 'f> Extractor<'s, 'f> {
                         if arg.kind() == "func_literal" {
                             continue;
                         }
-                        // Fiber: `app.Use(sub)` — a sub-app at the root.
-                        if let Some(child) = self.router_of(scope, *arg).filter(|r| r.trusted) {
+                        // Fiber: `app.Use(sub)` — a sub-app at the root. `handlers.NotFound`
+                        // from another package is middleware unless it is called a router.
+                        if let Some(child) = self.router_of(scope, *arg).filter(|r| r.declared) {
                             if child.name != current.name {
                                 self.mount(
                                     scope,
@@ -2044,7 +2211,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
                             self.mount(scope, &current, child, prefix, None, *call);
                         } else if let Some(child) = self.mount_child_of_call(scope, args[1]) {
                             self.mount(scope, &current, child, prefix, None, *call);
-                        } else if !self.is_external_call(args[1]) {
+                        } else if !self.is_external_call(scope, args[1]) {
                             self.sink.warn(format!(
                                 "{}:{}: `{}` is mounted at {} but could not be read as a router",
                                 self.file.display_path(),
@@ -2188,7 +2355,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
     /// what was called, for the graph to trace to a function that returns one.
     fn mount_child_of_call(&mut self, scope: &mut Scope, node: Node<'f>) -> Option<String> {
         let node = unwrap(node);
-        if node.kind() != "call_expression" || self.is_external_call(node) {
+        if node.kind() != "call_expression" || self.is_external_call(scope, node) {
             return None;
         }
         let function = node.child_by_field_name("function")?;
@@ -2200,14 +2367,24 @@ impl<'s, 'f> Extractor<'s, 'f> {
 
     /// `http.FileServer(...)`, `promhttp.Handler()`: a call into a package outside the
     /// project, which nothing here can follow.
-    fn is_external_call(&self, node: Node<'_>) -> bool {
+    fn is_external_call(&self, scope: &Scope, node: Node<'_>) -> bool {
         let node = unwrap(node);
         if node.kind() != "call_expression" {
             return false;
         }
         node.child_by_field_name("function")
             .and_then(leftmost_identifier)
-            .is_some_and(|name| self.externals.contains(self.text(name)))
+            .is_some_and(|name| {
+                let name = self.text(name);
+                // `m.HTTPHandler(nil)` on an `autocert.Manager` is as external as
+                // `autocert.NewManager()`.
+                self.externals.contains(name)
+                    || scope.types.get(name).is_some_and(|ty| {
+                        split_qualified(ty)
+                            .0
+                            .is_some_and(|package| self.externals.contains(package))
+                    })
+            })
     }
 
     fn mount(
@@ -2301,6 +2478,17 @@ impl<'s, 'f> Extractor<'s, 'f> {
             .map(|f| self.span(f))
             .unwrap_or_else(|| self.span(at));
 
+        // `Get("/")` on a chi or gorilla subrouter is the mount point itself; on a Gin, Echo
+        // or Fiber group it is the group's path with a slash, distinct from `""`.
+        let mut path = path;
+        if path.segments.is_empty()
+            && !matches!(
+                router.flavour,
+                Flavour::Gin | Flavour::Echo | Flavour::Fiber
+            )
+        {
+            path.trailing_slash = false;
+        }
         let path_params: Vec<String> = path.param_names().iter().map(|s| s.to_string()).collect();
         let mut fact = RouteFact::new(
             SymbolRef::new(self.module(), router.name.clone()),
@@ -2627,8 +2815,10 @@ impl<'s, 'f> Extractor<'s, 'f> {
     fn is_path_argument(&self, scope: &Scope, node: Node<'_>, certain: bool) -> bool {
         let node = unwrap(node);
         match node.kind() {
+            // Fiber and Echo accept `Group("api")`; a client's `Get(url)` starts with
+            // `http`, so where the position is ambiguous the slash decides.
             "interpreted_string_literal" | "raw_string_literal" => {
-                string_literal(self.file, node).is_some_and(|text| is_path_text(&text))
+                string_literal(self.file, node).is_some_and(|text| certain || is_path_text(&text))
             }
             "identifier" => {
                 let name = self.text(node);
@@ -2637,7 +2827,7 @@ impl<'s, 'f> Extractor<'s, 'f> {
                     .get(name)
                     .or_else(|| self.constants.get(name))
                 {
-                    Some(value) => is_path_text(value),
+                    Some(value) => certain || is_path_text(value),
                     None => {
                         certain
                             && !scope.routers.contains_key(name)
@@ -2688,7 +2878,14 @@ impl<'s, 'f> Extractor<'s, 'f> {
                 // `fmt.Sprintf("/%s/users", version)`, `path.Join(prefix, "/x")`,
                 // `os.Getenv("PREFIX")` where only a path can go.
                 let text = self.text(node);
-                certain || text.starts_with("fmt.Sprintf(\"/") || text.starts_with("path.Join(")
+                let lowered = text.to_ascii_lowercase();
+                text.starts_with("fmt.Sprintf(\"/")
+                    || text.starts_with("path.Join(")
+                    || (certain
+                        && (text.starts_with("os.Getenv(")
+                            || text.starts_with("viper.Get")
+                            || lowered.contains("prefix")
+                            || lowered.contains("path")))
             }
             _ => false,
         }
@@ -3092,6 +3289,76 @@ fn looks_like_router(name: &str) -> bool {
     lowered.contains("router") || lowered.contains("mux") || lowered.contains("engine")
 }
 
+/// `app`, `r`, `router`, `e`: what a router is usually called, which is what makes a
+/// `.Use` or `.Group` on it convincing — GORM's `db` has both methods too.
+fn usual_router_name(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "app"
+            | "r"
+            | "e"
+            | "g"
+            | "router"
+            | "engine"
+            | "mux"
+            | "srv"
+            | "server"
+            | "api"
+            | "group"
+            | "rg"
+            | "root"
+            | "route"
+            | "routes"
+            | "v1"
+            | "v2"
+            | "handler"
+    )
+}
+
+/// A method nothing but a router has.
+fn is_unmistakable_piece(name: &str) -> bool {
+    UPPER_METHODS.iter().any(|(m, _)| *m == name)
+        || SERVE_METHODS.contains(&name)
+        || matches!(
+            name,
+            "HandleFunc"
+                | "Handle"
+                | "Mount"
+                | "Route"
+                | "With"
+                | "Subrouter"
+                | "PathPrefix"
+                | "Methods"
+                | "HandlerFunc"
+                | "MethodFunc"
+        )
+}
+
+/// A method that only a router has: seeing one on a value settles what the value is.
+fn is_routing_piece(name: &str) -> bool {
+    UPPER_METHODS.iter().any(|(m, _)| *m == name)
+        || TITLE_METHODS.iter().any(|(m, _)| *m == name)
+        || GORILLA_PIECES.contains(&name)
+        || SERVE_METHODS.contains(&name)
+        || matches!(
+            name,
+            "Any"
+                | "All"
+                | "Handle"
+                | "HandleFunc"
+                | "Group"
+                | "Route"
+                | "Mount"
+                | "Use"
+                | "With"
+                | "Method"
+                | "MethodFunc"
+                | "Add"
+                | "Match"
+                | "Static"
+        )
+}
+
 /// Whether an argument could be a handler or a router: a name, a literal function, a
 /// call that builds one — not a number or a string.
 fn is_handler_like(node: Node<'_>) -> bool {
@@ -3135,7 +3402,9 @@ fn group_from_prefix(prefix: &PathTemplate) -> Option<String> {
 /// `:id<int>` (Gin, Echo, Fiber), `*`, `*name`, `+` (catch-alls).
 fn parse_go_path(text: &str) -> PathTemplate {
     let trimmed = text.trim();
-    let trailing_slash = trimmed.len() > 1 && trimmed.ends_with('/');
+    // `"/"` on a group is the group's path with a trailing slash — `/articles/` — which
+    // is a different route from `""`, and Gin serves both.
+    let trailing_slash = trimmed.ends_with('/');
     let mut segments = Vec::new();
     for raw in trimmed.split('/').filter(|s| !s.is_empty()) {
         if raw == "{$}" {
@@ -3294,7 +3563,7 @@ mod tests {
             .unwrap();
         let mut sink = FactSink::new();
         let adapter = GoAdapter {
-            module_path: RefCell::new(Some(module.to_string())),
+            modules: RefCell::new(vec![(PathBuf::new(), module.to_string())]),
         };
         adapter.extract(&file, &mut sink);
         sink

@@ -289,8 +289,16 @@ impl RegistrationGraph {
 
         for _ in 0..MAX_ALIAS_HOPS {
             let name = parts.join(".");
-            if let Some(symbol) = self.package_routers.get(&(package.clone(), name)) {
+            if let Some(symbol) = self.package_routers.get(&(package.clone(), name.clone())) {
                 return symbol.clone();
+            }
+            // `AppConfig.App` stands for the router put in that field; `NewHandler` for
+            // the `Handler` it returns, so `NewHandler.Routes` is `Handler.Routes`.
+            if let Some(alias) = self.package_exports.get(&(package.clone(), name.clone())) {
+                if *alias != name {
+                    parts = alias.split('.').collect();
+                    continue;
+                }
             }
             match self
                 .package_exports
