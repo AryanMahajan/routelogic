@@ -133,6 +133,10 @@ pub struct RouteFact {
     pub description: Option<String>,
     pub group: Option<String>,
     pub deprecated: bool,
+    /// The handler as the registration names it — `h.List`, normalised to `Handler.List`
+    /// — when it is declared somewhere other than where it is registered. What it reads
+    /// from the request is filled in afterwards from a [`HandlerFact`] by that name.
+    pub handler: Option<SymbolRef>,
     pub span: Span,
 }
 
@@ -150,9 +154,29 @@ impl RouteFact {
             description: None,
             group: None,
             deprecated: false,
+            handler: None,
             span,
         }
     }
+}
+
+/// What a handler function reads from its request, recorded where the function is
+/// declared so a route registered in another file can pick it up.
+///
+/// Go keeps `routes.go` and `handlers.go` apart as a matter of course, and a route knows
+/// its handler only by name. This is the name's other half.
+#[derive(Debug, Clone)]
+pub struct HandlerFact {
+    pub module: PathBuf,
+    /// `List`, or `Handler.List` for a method.
+    pub name: String,
+    pub query_params: Vec<ParamSpec>,
+    pub headers: Vec<ParamSpec>,
+    pub body: Option<BodySchema>,
+    pub auth: Option<AuthRequirement>,
+    /// The methods the handler checks `r.Method` against, for a route registered without
+    /// one.
+    pub methods: Vec<HttpMethod>,
 }
 
 /// A router was mounted onto another router at a prefix.
@@ -232,6 +256,12 @@ pub struct FactSink {
     pub exports: Vec<ExportFact>,
     /// Classes with annotated fields, for filling in request bodies. See [`crate::models`].
     pub models: Vec<crate::models::ModelFact>,
+    /// Handler functions, for routes that only name theirs. See [`crate::handlers`].
+    pub handlers: Vec<HandlerFact>,
+    /// Ports the source says it listens on — `http.ListenAndServe(":8080", …)` — with
+    /// where each was seen. A manifest is the usual place to learn the port; Go states it
+    /// in code instead.
+    pub ports: Vec<(u16, String)>,
     /// Anything the adapter noticed but could not express.
     pub warnings: Vec<String>,
 }
@@ -265,8 +295,16 @@ impl FactSink {
         self.models.push(fact);
     }
 
+    pub fn handler(&mut self, fact: HandlerFact) {
+        self.handlers.push(fact);
+    }
+
     pub fn warn(&mut self, message: impl Into<String>) {
         self.warnings.push(message.into());
+    }
+
+    pub fn port(&mut self, port: u16, seen_at: impl Into<String>) {
+        self.ports.push((port, seen_at.into()));
     }
 
     pub fn is_empty(&self) -> bool {
@@ -280,6 +318,8 @@ impl FactSink {
         self.imports.extend(other.imports);
         self.exports.extend(other.exports);
         self.models.extend(other.models);
+        self.handlers.extend(other.handlers);
+        self.ports.extend(other.ports);
         self.warnings.extend(other.warnings);
     }
 }
@@ -304,6 +344,10 @@ pub fn resolve_module(
         crate::project::Language::JavaScript | crate::project::Language::TypeScript => {
             resolve_js_module(importing, source, known)
         }
+        // The Go adapter rewrites an import of the project's own module into the
+        // root-relative form handled above (`example.com/app/internal/routes` →
+        // `/internal/routes`); anything still bare names a module outside the project.
+        crate::project::Language::Go => None,
     }
 }
 

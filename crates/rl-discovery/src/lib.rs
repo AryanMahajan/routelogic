@@ -35,6 +35,7 @@ pub mod enrich;
 pub mod error;
 pub mod facts;
 pub mod graph;
+pub mod handlers;
 pub mod index;
 pub mod models;
 pub mod project;
@@ -47,7 +48,8 @@ pub use enrich::{
 };
 pub use error::{DiscoveryError, Result};
 pub use facts::{
-    ExportFact, FactSink, ImportFact, MountFact, RouteFact, RouterFact, Span, SymbolId, SymbolRef,
+    ExportFact, FactSink, HandlerFact, ImportFact, MountFact, RouteFact, RouterFact, Span,
+    SymbolId, SymbolRef,
 };
 pub use graph::{GraphWarning, RegistrationGraph, ResolvedRoute};
 pub use index::{ParsedFile, SourceIndex};

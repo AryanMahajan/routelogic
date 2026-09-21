@@ -27,6 +27,7 @@ fn default_port(framework: &str) -> Option<(u16, &'static str)> {
         "django" => Some((8000, "Django default")),
         "nextjs" => Some((3000, "Next.js default")),
         "express" => Some((3000, "the usual Express choice")),
+        "go" => Some((8080, "the usual Go choice")),
         _ => None,
     }
 }
@@ -36,6 +37,16 @@ fn default_port(framework: &str) -> Option<(u16, &'static str)> {
 /// `frameworks` are the detected framework ids, best first, and decide which default port
 /// is offered when the project says nothing about how it runs.
 pub fn infer(project: &ProjectContext, frameworks: &[&str]) -> Vec<BaseUrlCandidate> {
+    infer_with_listen_ports(project, frameworks, &[])
+}
+
+/// [`infer`], plus ports the scan read out of the source itself — a Go
+/// `http.ListenAndServe(":8080", …)` — each with where it was seen.
+pub fn infer_with_listen_ports(
+    project: &ProjectContext,
+    frameworks: &[&str],
+    listen_ports: &[(u16, String)],
+) -> Vec<BaseUrlCandidate> {
     let mut found: Vec<BaseUrlCandidate> = Vec::new();
 
     let mut add = |port: u16, source: String, confidence: u8| {
@@ -61,6 +72,11 @@ pub fn infer(project: &ProjectContext, frameworks: &[&str]) -> Vec<BaseUrlCandid
         for port in ports_from_run_commands(text) {
             add(port, format!("run command in {name}"), 9);
         }
+    }
+
+    // The address the program binds, stated in code. As good as a run command.
+    for (port, seen_at) in listen_ports {
+        add(*port, seen_at.clone(), 8);
     }
 
     // Published container ports: `"8000:8000"` — the left side is what the host sees.

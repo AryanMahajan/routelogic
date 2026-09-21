@@ -105,6 +105,7 @@ pub fn scan_project(project: &ProjectContext) -> Result<ScanResult> {
 
     let known: BTreeSet<PathBuf> = project.files().iter().cloned().collect();
     let mut index = SourceIndex::new()?;
+    let mut listen_ports: Vec<(u16, String)> = Vec::new();
 
     for adapter in adapters::all() {
         let detection = adapter.detect(project);
@@ -129,8 +130,11 @@ pub fn scan_project(project: &ProjectContext) -> Result<ScanResult> {
 
         warnings.append(&mut sink.warnings.clone());
         sink.warnings.clear();
-        // The graph consumes the sink; models are resolved against the routes afterwards.
+        listen_ports.append(&mut sink.ports);
+        // The graph consumes the sink; models and handlers are resolved against the
+        // routes afterwards.
         let models = crate::models::ModelIndex::new(std::mem::take(&mut sink.models));
+        let handlers = crate::handlers::HandlerIndex::new(std::mem::take(&mut sink.handlers));
 
         let graph = RegistrationGraph::build(sink, &known);
         stats.routers_found += graph.router_count();
@@ -148,6 +152,12 @@ pub fn scan_project(project: &ProjectContext) -> Result<ScanResult> {
 
         for route in resolution.routes {
             let mut spec = to_spec(adapter.as_ref(), &route);
+            // A route that only names its handler gets what the handler reads — and a
+            // route registered without a method keeps only the methods the handler
+            // checks for.
+            if !handlers.fill(&mut spec, route.fact) {
+                continue;
+            }
             // A body that only names its model gets the model's fields, so the editor
             // opens with a body to edit rather than a blank to guess at.
             if let Some(body) = &mut spec.body {
@@ -172,7 +182,7 @@ pub fn scan_project(project: &ProjectContext) -> Result<ScanResult> {
     // Best-detected framework first, so its default port is the one offered first.
     frameworks.sort_by_key(|f| std::cmp::Reverse(f.score));
     let framework_ids: Vec<&str> = frameworks.iter().map(|f| f.id.as_str()).collect();
-    let base_urls = baseurl::infer(project, &framework_ids);
+    let base_urls = baseurl::infer_with_listen_ports(project, &framework_ids, &listen_ports);
 
     Ok(ScanResult {
         root: project.root().to_path_buf(),

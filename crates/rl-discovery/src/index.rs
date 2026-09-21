@@ -1,7 +1,7 @@
 //! Parsing source into syntax trees.
 //!
 //! tree-sitter rather than a language-specific parser, for three reasons: one API across
-//! Python, JavaScript and TypeScript; error tolerance, so a file that does not currently
+//! Python, JavaScript, TypeScript and Go; error tolerance, so a file that does not currently
 //! compile still yields routes; and patterns that read as structure rather than as
 //! hand-rolled visitor code.
 //!
@@ -70,6 +70,7 @@ pub struct SourceIndex {
     typescript: Parser,
     /// TSX is a separate grammar: `<T>` is a type assertion in `.ts` and a tag in `.tsx`.
     tsx: Parser,
+    go: Parser,
 }
 
 fn parser(language: &tree_sitter::Language, name: &'static str) -> Result<Parser> {
@@ -93,6 +94,7 @@ impl SourceIndex {
                 "typescript",
             )?,
             tsx: parser(&tree_sitter_typescript::LANGUAGE_TSX.into(), "tsx")?,
+            go: parser(&tree_sitter_go::LANGUAGE.into(), "go")?,
         })
     }
 
@@ -113,6 +115,7 @@ impl SourceIndex {
             Language::JavaScript => &mut self.javascript,
             Language::TypeScript if is_tsx => &mut self.tsx,
             Language::TypeScript => &mut self.typescript,
+            Language::Go => &mut self.go,
         };
 
         let tree = parser.parse(&source, None)?;

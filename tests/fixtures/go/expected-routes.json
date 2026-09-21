@@ -1,0 +1,160 @@
+{
+  "frameworks": [
+    "go"
+  ],
+  "base_url": "http://localhost:8080",
+  "routes": [
+    {
+      "method": "DELETE",
+      "path": "/api/v1/users/{id}",
+      "group": "users",
+      "source": "internal/users/routes.go:17",
+      "has_auth": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/?/stats",
+      "group": "admin",
+      "source": "internal/admin/admin.go:17",
+      "unresolved": true,
+      "has_auth": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/reports/?",
+      "group": "reports",
+      "source": "internal/reports/reports.go:16",
+      "unresolved": true,
+      "has_auth": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/orders",
+      "group": "orders",
+      "source": "internal/orders/routes.go:14",
+      "query": [
+        "status"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/orders/{orderId}",
+      "group": "orders",
+      "source": "internal/orders/routes.go:15"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/orders/{orderId}/items",
+      "group": "orders",
+      "source": "internal/orders/routes.go:16"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "group": "users",
+      "source": "internal/users/routes.go:13",
+      "query": [
+        "limit",
+        "q"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users/{id}",
+      "group": "users",
+      "source": "internal/users/routes.go:14",
+      "headers": [
+        "X-Trace-Id"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "source": "cmd/server/main.go:22"
+    },
+    {
+      "method": "GET",
+      "path": "/legacy/orders",
+      "group": "orders",
+      "source": "internal/orders/routes.go:14",
+      "query": [
+        "status"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/legacy/orders/{orderId}",
+      "group": "orders",
+      "source": "internal/orders/routes.go:15"
+    },
+    {
+      "method": "GET",
+      "path": "/legacy/orders/{orderId}/items",
+      "group": "orders",
+      "source": "internal/orders/routes.go:16"
+    },
+    {
+      "method": "GET",
+      "path": "/v0/users",
+      "group": "legacy",
+      "source": "internal/legacy/legacy.go:11",
+      "orphaned": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/?/cache/flush",
+      "group": "admin",
+      "source": "internal/admin/admin.go:18",
+      "unresolved": true,
+      "has_auth": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/orders",
+      "group": "orders",
+      "source": "internal/orders/routes.go:17",
+      "has_body": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/users",
+      "group": "users",
+      "source": "internal/users/routes.go:15",
+      "has_body": true,
+      "has_auth": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/users/{id}/avatar",
+      "group": "users",
+      "source": "internal/users/routes.go:18",
+      "has_body": true,
+      "has_auth": true
+    },
+    {
+      "method": "POST",
+      "path": "/legacy/orders",
+      "group": "orders",
+      "source": "internal/orders/routes.go:17",
+      "has_body": true
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/users/{id}",
+      "group": "users",
+      "source": "internal/users/routes.go:16",
+      "has_body": true,
+      "has_auth": true
+    }
+  ],
+  "warnings": [
+    "legacy.go:Register",
+    "never mounted"
+  ],
+  "expected_misses": [
+    {
+      "path": "/api/v1/admin/reports/summary",
+      "reason": "registered with `g.Handle(method, ...)` where the method is a variable; the registration is skipped rather than guessed at"
+    }
+  ]
+}

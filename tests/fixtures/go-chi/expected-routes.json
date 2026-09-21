@@ -1,0 +1,236 @@
+{
+  "frameworks": [
+    "go"
+  ],
+  "base_url": "http://localhost:3000",
+  "routes": [
+    {
+      "method": "DELETE",
+      "path": "/notes/{id}",
+      "group": "notes",
+      "source": "internal/api/server.go:51",
+      "headers": [
+        "X-Confirm"
+      ],
+      "has_auth": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/v0/notes",
+      "group": "legacy",
+      "source": "internal/legacy/legacy.go:9",
+      "orphaned": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2",
+      "group": "v2",
+      "source": "internal/v2/mux.go:16"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v2/notes/{id}",
+      "group": "v2",
+      "source": "internal/v2/mux.go:13"
+    },
+    {
+      "method": "GET",
+      "path": "/?/stats",
+      "group": "admin",
+      "source": "internal/admin/admin.go:27",
+      "unresolved": true,
+      "has_auth": true
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "source": "internal/api/server.go:42"
+    },
+    {
+      "method": "GET",
+      "path": "/labels",
+      "group": "tags",
+      "source": "internal/tags/tags.go:13"
+    },
+    {
+      "method": "GET",
+      "path": "/labels/{name}",
+      "group": "tags",
+      "source": "internal/tags/tags.go:14"
+    },
+    {
+      "method": "GET",
+      "path": "/labels/{name}/notes",
+      "group": "tags",
+      "source": "internal/tags/tags.go:15",
+      "query": [
+        "limit"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/notes",
+      "group": "notes",
+      "source": "internal/api/server.go:45",
+      "query": [
+        "tag",
+        "page"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/notes/{id}",
+      "group": "notes",
+      "source": "internal/api/server.go:49",
+      "has_auth": true
+    },
+    {
+      "method": "GET",
+      "path": "/tags",
+      "group": "tags",
+      "source": "internal/tags/tags.go:13"
+    },
+    {
+      "method": "GET",
+      "path": "/tags/{name}",
+      "group": "tags",
+      "source": "internal/tags/tags.go:14"
+    },
+    {
+      "method": "GET",
+      "path": "/tags/{name}/notes",
+      "group": "tags",
+      "source": "internal/tags/tags.go:15",
+      "query": [
+        "limit"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/v0/notes",
+      "group": "legacy",
+      "source": "internal/legacy/legacy.go:9",
+      "orphaned": true
+    },
+    {
+      "method": "GET",
+      "path": "/v2",
+      "group": "v2",
+      "source": "internal/v2/mux.go:16"
+    },
+    {
+      "method": "GET",
+      "path": "/v2/export",
+      "group": "v2",
+      "source": "internal/v2/mux.go:15",
+      "query": [
+        "format"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/v2/files/{path}",
+      "group": "v2",
+      "source": "internal/v2/mux.go:14"
+    },
+    {
+      "method": "GET",
+      "path": "/v2/notes/{id}",
+      "group": "v2",
+      "source": "internal/v2/mux.go:11"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v0/notes",
+      "group": "legacy",
+      "source": "internal/legacy/legacy.go:9",
+      "orphaned": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/v2",
+      "group": "v2",
+      "source": "internal/v2/mux.go:16"
+    },
+    {
+      "method": "POST",
+      "path": "/?/reindex",
+      "group": "admin",
+      "source": "internal/admin/admin.go:28",
+      "unresolved": true,
+      "has_auth": true
+    },
+    {
+      "method": "POST",
+      "path": "/notes",
+      "group": "notes",
+      "source": "internal/api/server.go:46",
+      "has_body": true,
+      "has_auth": true
+    },
+    {
+      "method": "POST",
+      "path": "/v0/notes",
+      "group": "legacy",
+      "source": "internal/legacy/legacy.go:9",
+      "orphaned": true
+    },
+    {
+      "method": "POST",
+      "path": "/v2",
+      "group": "v2",
+      "source": "internal/v2/mux.go:16"
+    },
+    {
+      "method": "POST",
+      "path": "/v2/export",
+      "group": "v2",
+      "source": "internal/v2/mux.go:15",
+      "query": [
+        "format"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v2/notes",
+      "group": "v2",
+      "source": "internal/v2/mux.go:12",
+      "has_body": true
+    },
+    {
+      "method": "PUT",
+      "path": "/notes/{id}",
+      "group": "notes",
+      "source": "internal/api/server.go:50",
+      "has_body": true,
+      "has_auth": true
+    },
+    {
+      "method": "PUT",
+      "path": "/v0/notes",
+      "group": "legacy",
+      "source": "internal/legacy/legacy.go:9",
+      "orphaned": true
+    },
+    {
+      "method": "PUT",
+      "path": "/v2",
+      "group": "v2",
+      "source": "internal/v2/mux.go:16"
+    }
+  ],
+  "warnings": [
+    "legacy.go:Mux",
+    "never mounted"
+  ],
+  "expected_misses": [
+    {
+      "path": "/search",
+      "reason": "registered from a map in a loop; static analysis cannot see what the table holds"
+    },
+    {
+      "path": "/search/recent",
+      "reason": "registered from a map in a loop; static analysis cannot see what the table holds"
+    }
+  ]
+}

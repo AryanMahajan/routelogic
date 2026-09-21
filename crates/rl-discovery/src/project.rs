@@ -24,6 +24,7 @@ const ALWAYS_SKIP: &[&str] = &[
     ".ruff_cache",
     ".tox",
     "target",
+    "vendor",
     "dist",
     "build",
     ".next",
@@ -44,6 +45,7 @@ const MANIFESTS: &[&str] = &[
     "Pipfile",
     "poetry.lock",
     "package.json",
+    "go.mod",
     "next.config.js",
     "next.config.mjs",
     "next.config.ts",
@@ -73,6 +75,7 @@ pub enum Language {
     Python,
     JavaScript,
     TypeScript,
+    Go,
 }
 
 impl Language {
@@ -81,6 +84,7 @@ impl Language {
             "py" | "pyi" => Some(Language::Python),
             "js" | "jsx" | "mjs" | "cjs" => Some(Language::JavaScript),
             "ts" | "tsx" | "mts" | "cts" => Some(Language::TypeScript),
+            "go" => Some(Language::Go),
             _ => None,
         }
     }
@@ -90,6 +94,7 @@ impl Language {
             Language::Python => "python",
             Language::JavaScript => "javascript",
             Language::TypeScript => "typescript",
+            Language::Go => "go",
         }
     }
 }

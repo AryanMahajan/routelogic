@@ -114,6 +114,12 @@ pub struct RegistrationGraph {
     import_bindings: BTreeMap<(PathBuf, String), Binding>,
     /// (module, exported name) → local name.
     exports: BTreeMap<(PathBuf, String), String>,
+    /// Go scopes a name to the package — the directory — not the file, so a router
+    /// declared in `routes.go` is `r` in `main.go` next to it. (directory, name) → symbol.
+    package_routers: BTreeMap<(PathBuf, String), SymbolId>,
+    /// Go aliases, by package: `NewHandler` stands for the `Handler` it returns, so
+    /// `NewHandler.Routes` is `Handler.Routes`. (directory, alias) → name.
+    package_exports: BTreeMap<(PathBuf, String), String>,
 }
 
 /// What an imported name points at.
@@ -140,6 +146,32 @@ impl RegistrationGraph {
         let import_bindings = resolve_imports(&sink.imports, &known);
         let exports = index_exports(&sink.exports);
 
+        let is_go = |module: &Path| {
+            crate::project::Language::of(module) == Some(crate::project::Language::Go)
+        };
+        let package_of = |module: &Path| module.parent().map(Path::to_path_buf).unwrap_or_default();
+        let package_routers = routers
+            .keys()
+            .filter(|symbol| is_go(&symbol.module))
+            .map(|symbol| {
+                (
+                    (package_of(&symbol.module), symbol.name.clone()),
+                    symbol.clone(),
+                )
+            })
+            .collect();
+        let package_exports = sink
+            .exports
+            .iter()
+            .filter(|export| is_go(&export.module))
+            .map(|export| {
+                (
+                    (package_of(&export.module), export.exported.clone()),
+                    export.local.clone(),
+                )
+            })
+            .collect();
+
         // Two settings files naming the same `ROOT_URLCONF`, or `app.use` called twice
         // with the same arguments, would otherwise walk the child twice and list every
         // route under it twice.
@@ -164,6 +196,8 @@ impl RegistrationGraph {
             mounts,
             import_bindings,
             exports,
+            package_routers,
+            package_exports,
         }
     }
 
@@ -178,6 +212,10 @@ impl RegistrationGraph {
 
     /// Trace a reference back to the symbol it names.
     fn resolve_symbol(&self, reference: &SymbolRef) -> Option<SymbolId> {
+        if crate::project::Language::of(&reference.module) == Some(crate::project::Language::Go) {
+            return Some(self.resolve_go_symbol(reference));
+        }
+
         let (qualifier, attribute) = reference.split();
 
         match qualifier {
@@ -223,6 +261,51 @@ impl RegistrationGraph {
                 }
             }
         }
+    }
+
+    /// A Go reference: the file, then the package, then an imported package.
+    ///
+    /// `r` is whatever file of the package declares it. `routes.Register` is `Register` in
+    /// the package `routes` was imported as. `NewHandler.Routes` follows the alias the
+    /// adapter recorded for the constructor, `Server` the one for a type that serves its
+    /// router. What resolves nowhere keeps its local id, so routes on it are reported as
+    /// registered on an undeclared router rather than lost.
+    fn resolve_go_symbol(&self, reference: &SymbolRef) -> SymbolId {
+        let file = &reference.module;
+        let local = SymbolId::new(file.clone(), reference.name.clone());
+        if self.routers.contains_key(&local) {
+            return local;
+        }
+
+        let mut package = file.parent().map(Path::to_path_buf).unwrap_or_default();
+        let mut parts: Vec<&str> = reference.name.split('.').collect();
+        if parts.len() > 1 {
+            let key = (file.clone(), parts[0].to_string());
+            if let Some(Binding::Module(module)) = self.import_bindings.get(&key) {
+                package = module.clone();
+                parts.remove(0);
+            }
+        }
+
+        for _ in 0..MAX_ALIAS_HOPS {
+            let name = parts.join(".");
+            if let Some(symbol) = self.package_routers.get(&(package.clone(), name)) {
+                return symbol.clone();
+            }
+            match self
+                .package_exports
+                .get(&(package.clone(), parts[0].to_string()))
+            {
+                Some(alias) if alias != parts[0] => {
+                    let mut next: Vec<&str> = alias.split('.').collect();
+                    next.extend_from_slice(&parts[1..]);
+                    parts = next;
+                }
+                _ => break,
+            }
+        }
+
+        local
     }
 
     /// Follow exports and re-exports until a declared router — or a dead end.

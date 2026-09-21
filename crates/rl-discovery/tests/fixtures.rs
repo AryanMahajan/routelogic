@@ -326,6 +326,140 @@ fn django_fixture_matches_snapshot() {
 }
 
 #[test]
+fn go_fixture_matches_snapshot() {
+    check("go");
+}
+
+/// The Gin fixture: routes registered through functions handed a group, handlers in the
+/// file next door, and one of each thing that cannot be known statically.
+#[test]
+fn go_fixture_reports_the_expected_problems() {
+    let root = fixtures_dir().join("go");
+    let result = scan(&root).unwrap();
+    let warnings = result.warnings.join("\n");
+
+    assert!(
+        warnings.contains("legacy.go:Register") && warnings.contains("never mounted"),
+        "the Register nobody calls should be reported, got:\n{warnings}"
+    );
+    assert!(
+        result
+            .endpoints
+            .iter()
+            .any(|e| e.path.unresolved_exprs() == vec!["cfg.Prefix"]),
+        "the configured prefix should be an unresolved gap, not a guess"
+    );
+    assert!(
+        !result
+            .endpoints
+            .iter()
+            .any(|e| e.path.to_string().contains("summary")),
+        "a method held in a variable is a documented miss"
+    );
+    // orders.Register is handed two groups, so its routes appear under both.
+    let orders: Vec<String> = result
+        .endpoints
+        .iter()
+        .filter(|e| e.path.to_string().ends_with("/orders"))
+        .map(|e| e.display())
+        .collect();
+    assert_eq!(
+        orders,
+        vec![
+            "GET /api/v1/orders",
+            "POST /api/v1/orders",
+            "GET /legacy/orders",
+            "POST /legacy/orders"
+        ]
+    );
+    // The handler is in handler.go; the route in routes.go names it.
+    let create = result
+        .endpoints
+        .iter()
+        .find(|e| e.display() == "POST /api/v1/users")
+        .expect("POST /users");
+    let body = create.body.as_ref().expect("a body from CreateUser");
+    assert_eq!(
+        body.example,
+        Some(serde_json::json!({
+            "name": "string",
+            "email": "string",
+            "age": 0,
+            "tags": ["string"]
+        })),
+        "the struct's json tags, minus the `json:\"-\"` field"
+    );
+    assert!(create.auth.is_some(), "AuthRequired() in the chain");
+    let list = result
+        .endpoints
+        .iter()
+        .find(|e| e.display() == "GET /api/v1/users")
+        .expect("GET /users");
+    let query: Vec<&str> = list.query_params.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(query, vec!["limit", "q"]);
+    assert_eq!(result.base_urls[0].url, "http://localhost:8080");
+}
+
+#[test]
+fn go_chi_fixture_matches_snapshot() {
+    check("go-chi");
+}
+
+/// The chi fixture: a server type serving its router, resources returning routers,
+/// `Route` closures, a mount that reaches another package through a constructor, and a
+/// Go 1.22 mux behind `http.StripPrefix`.
+#[test]
+fn go_chi_fixture_reports_the_expected_problems() {
+    let root = fixtures_dir().join("go-chi");
+    let result = scan(&root).unwrap();
+    let warnings = result.warnings.join("\n");
+
+    assert!(
+        warnings.contains("legacy.go:Mux") && warnings.contains("never mounted"),
+        "the mux nothing serves should be reported, got:\n{warnings}"
+    );
+    assert!(
+        !result
+            .endpoints
+            .iter()
+            .any(|e| e.orphaned && !e.path.to_string().contains("/v0/")),
+        "everything but the legacy mux is reached from main's ListenAndServe"
+    );
+    assert!(
+        result
+            .endpoints
+            .iter()
+            .any(|e| e.path.unresolved_exprs() == vec!["os.Getenv(\"ADMIN_PREFIX\")"]),
+        "the environment prefix should be an unresolved gap, not a guess"
+    );
+    assert!(
+        !result
+            .endpoints
+            .iter()
+            .any(|e| e.path.to_string().contains("recent")),
+        "table-driven registration is a documented miss"
+    );
+    // A method-less HandleFunc keeps only the methods its handler checks for.
+    let export: Vec<String> = result
+        .endpoints
+        .iter()
+        .filter(|e| e.path.to_string() == "/v2/export")
+        .map(|e| e.display())
+        .collect();
+    assert_eq!(export, vec!["GET /v2/export", "POST /v2/export"]);
+    let guarded = result
+        .endpoints
+        .iter()
+        .find(|e| e.display() == "GET /notes/{id}")
+        .expect("GET /notes/{id}");
+    assert!(
+        matches!(guarded.auth, Some(rl_model::AuthRequirement::Bearer { .. })),
+        "jwtauth.Verifier in the Route closure's Use"
+    );
+    assert_eq!(result.base_urls[0].url, "http://localhost:3000");
+}
+
+#[test]
 fn django_fixture_reports_the_expected_problems() {
     let root = fixtures_dir().join("django");
     let result = scan(&root).unwrap();

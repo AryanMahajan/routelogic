@@ -8,6 +8,7 @@ pub mod django;
 pub mod express;
 pub mod fastapi;
 pub mod flask;
+pub mod go;
 pub mod js;
 pub mod nextjs;
 pub mod python;
@@ -91,6 +92,7 @@ pub fn all() -> Vec<Box<dyn FrameworkAdapter>> {
         Box::new(django::DjangoAdapter),
         Box::new(nextjs::NextJsAdapter),
         Box::new(express::ExpressAdapter),
+        Box::new(go::GoAdapter::default()),
     ]
 }
 
