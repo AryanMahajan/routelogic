@@ -22,6 +22,7 @@ rl-http = { path = "crates/rl-http" }
 rl-flow = { path = "crates/rl-flow" }
 rl-workspace = { path = "crates/rl-workspace" }
 rl-core = { path = "crates/rl-core" }
+rl-mcp = { path = "crates/rl-mcp" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

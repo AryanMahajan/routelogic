@@ -1,0 +1,28 @@
+[package]
+name = "rl-mcp"
+description = "RouteLogic over the Model Context Protocol: lets an agent read a project's API, send requests and write flows."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "routelogic-mcp"
+path = "src/main.rs"
+
+[dependencies]
+rl-core.workspace = true
+rl-flow.workspace = true
+rl-model.workspace = true
+rl-workspace.workspace = true
+rmcp = { version = "3.4.1", default-features = false, features = ["server", "macros", "transport-io"] }
+schemars = "1"
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "sync"] }
+
+[dev-dependencies]
+rmcp = { version = "3.4.1", default-features = false, features = ["client", "transport-child-process"] }
+tempfile = "3"
