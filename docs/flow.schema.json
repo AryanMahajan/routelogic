@@ -1,0 +1,849 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Flow",
+  "description": "A saved flow: one file.",
+  "type": "object",
+  "properties": {
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "edges": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Edge"
+      }
+    },
+    "name": {
+      "type": "string"
+    },
+    "nodes": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Node"
+      }
+    },
+    "version": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 1,
+      "minimum": 0
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "$defs": {
+    "ApiKeyLocation": {
+      "description": "Where an API key travels.",
+      "type": "string",
+      "enum": [
+        "header",
+        "query",
+        "cookie"
+      ]
+    },
+    "Assertion": {
+      "description": "A check on a response. Any failing assertion fails its node.",
+      "type": "object",
+      "properties": {
+        "expected": {
+          "description": "May contain `{{variables}}`. Ignored by unary operators.",
+          "type": "string"
+        },
+        "op": {
+          "$ref": "#/$defs/Operator"
+        }
+      },
+      "oneOf": [
+        {
+          "description": "The HTTP status code, as a number.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "status"
+            }
+          },
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "description": "A response header, case-insensitively. The first one when repeated. The field is\n`header` rather than `name` because this enum is flattened into [`Extraction`],\nwhich already has a `name`.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "header"
+            },
+            "header": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "from",
+            "header"
+          ]
+        },
+        {
+          "description": "A path into the response body parsed as JSON: `user.id`, `items[0].name`, `$` for\nthe whole document. Scalars are extracted as their plain text; objects and arrays as\ncompact JSON.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "body"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "from",
+            "path"
+          ]
+        },
+        {
+          "description": "The body as text, whole.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "body_text"
+            }
+          },
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "description": "How long the exchange took, in milliseconds.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "duration"
+            }
+          },
+          "required": [
+            "from"
+          ]
+        }
+      ],
+      "required": [
+        "op"
+      ]
+    },
+    "AuthConfig": {
+      "description": "Concrete authentication for a request.\n\nAuth is structured rather than written as a raw header. That is what lets a request\nround-trip: an environment switch can swap the token, and export can re-render the header\ncorrectly. A hand-written `Authorization` header cannot be reasoned about.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "none"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Take auth from the enclosing collection or workspace.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inherit"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "token": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "bearer"
+            }
+          },
+          "required": [
+            "type",
+            "token"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "password": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "basic"
+            },
+            "username": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "username",
+            "password"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "location": {
+              "$ref": "#/$defs/ApiKeyLocation"
+            },
+            "type": {
+              "type": "string",
+              "const": "api_key"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "key",
+            "value",
+            "location"
+          ]
+        }
+      ]
+    },
+    "BodyValue": {
+      "description": "A request body.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "none"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "json"
+            }
+          },
+          "required": [
+            "type",
+            "content"
+          ]
+        },
+        {
+          "description": "Any other textual body, with the content type stated explicitly.",
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "text"
+            }
+          },
+          "required": [
+            "type",
+            "content",
+            "content_type"
+          ]
+        },
+        {
+          "description": "`application/x-www-form-urlencoded`",
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/KeyValue"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "form"
+            }
+          },
+          "required": [
+            "type",
+            "fields"
+          ]
+        },
+        {
+          "description": "`multipart/form-data`",
+          "type": "object",
+          "properties": {
+            "parts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/FormPart"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "multipart"
+            }
+          },
+          "required": [
+            "type",
+            "parts"
+          ]
+        },
+        {
+          "description": "Sent verbatim from a file.",
+          "type": "object",
+          "properties": {
+            "content_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "binary"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ]
+        }
+      ]
+    },
+    "Edge": {
+      "description": "A dependency: `to` runs after `from`, and only if `from` passed.",
+      "type": "object",
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/NodeId"
+        },
+        "handle": {
+          "description": "Which output of `from` this leaves — [`HANDLE_TRUE`] or [`HANDLE_FALSE`] on a\ncondition, absent on a request.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to": {
+          "$ref": "#/$defs/NodeId"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ]
+    },
+    "EndpointId": {
+      "description": "A stable identifier for a discovered endpoint.\n\nDerived from method and path *shape*, so it survives a rescan: renaming a handler or\nmoving it to another file does not break a saved request's `spec_ref`.",
+      "type": "string"
+    },
+    "Extraction": {
+      "description": "Turn part of a response into a variable for the nodes that follow.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The variable name later nodes reference as `{{name}}`.",
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "description": "The HTTP status code, as a number.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "status"
+            }
+          },
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "description": "A response header, case-insensitively. The first one when repeated. The field is\n`header` rather than `name` because this enum is flattened into [`Extraction`],\nwhich already has a `name`.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "header"
+            },
+            "header": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "from",
+            "header"
+          ]
+        },
+        {
+          "description": "A path into the response body parsed as JSON: `user.id`, `items[0].name`, `$` for\nthe whole document. Scalars are extracted as their plain text; objects and arrays as\ncompact JSON.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "body"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "from",
+            "path"
+          ]
+        },
+        {
+          "description": "The body as text, whole.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "body_text"
+            }
+          },
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "description": "How long the exchange took, in milliseconds.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "duration"
+            }
+          },
+          "required": [
+            "from"
+          ]
+        }
+      ],
+      "required": [
+        "name"
+      ]
+    },
+    "FormPart": {
+      "description": "One part of a multipart body.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "kind": {
+              "type": "string",
+              "const": "text"
+            },
+            "name": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "content_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "kind": {
+              "type": "string",
+              "const": "file"
+            },
+            "name": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "path"
+          ]
+        }
+      ]
+    },
+    "HttpMethod": {
+      "description": "An HTTP method, upper case. Any token is accepted; these are the usual ones.",
+      "type": "string",
+      "examples": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "HEAD",
+        "OPTIONS"
+      ]
+    },
+    "KeyValue": {
+      "description": "One row in a key/value table — query parameters, headers, cookies, form fields.\n\n`enabled` is stored rather than the row being deleted, so toggling a parameter off\nproduces a one-word diff in a committed collection instead of a removed line.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "key"
+      ]
+    },
+    "Node": {
+      "description": "What a node does.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/NodeId"
+        },
+        "name": {
+          "description": "A label for the card. Falls back to the request's name or display in the UI.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "position": {
+          "description": "Where the card sits. Leave it out and the node is placed by [`Flow::lay_out`] the\nnext time the flow is loaded or saved.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Position"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "description": "Send a request, then extract and assert on what came back.",
+          "type": "object",
+          "properties": {
+            "assert": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Assertion"
+              }
+            },
+            "extract": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Extraction"
+              }
+            },
+            "request": {
+              "$ref": "#/$defs/RequestDraft"
+            },
+            "type": {
+              "type": "string",
+              "const": "request"
+            }
+          },
+          "required": [
+            "type",
+            "request"
+          ]
+        },
+        {
+          "description": "Compare two interpolated strings and continue down one of two outputs.",
+          "type": "object",
+          "properties": {
+            "left": {
+              "type": "string"
+            },
+            "op": {
+              "$ref": "#/$defs/Operator"
+            },
+            "right": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "condition"
+            }
+          },
+          "required": [
+            "type",
+            "left",
+            "op"
+          ]
+        },
+        {
+          "description": "Declare variables for the steps that follow — the flow's inputs.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "variables"
+            },
+            "variables": {
+              "type": "array",
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/Variable"
+              }
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Resolve a template and show it.",
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "default": ""
+            },
+            "type": {
+              "type": "string",
+              "const": "display"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ],
+      "required": [
+        "id"
+      ]
+    },
+    "NodeId": {
+      "description": "Any string, unique within the flow. The canvas makes UUIDs; a hand-written flow can use\nwords — `login`, `create_user` — which read better in an edge list.",
+      "type": "string"
+    },
+    "Operator": {
+      "description": "How an assertion or condition compares its two sides.\n\nWhen both sides parse as numbers the comparison is numeric, so `\"200\"` equals `200` and\n`\"9\"` is not greater than `\"10\"`. Otherwise it is a plain string comparison.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "not_exists",
+            "greater_than",
+            "less_than"
+          ]
+        },
+        {
+          "description": "The value is present at all — a header that was sent, a body path that resolves.\nThe right-hand side is ignored.",
+          "type": "string",
+          "const": "exists"
+        }
+      ]
+    },
+    "Position": {
+      "description": "Where a node sits on the canvas. Part of the document, never part of its meaning.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ]
+    },
+    "RequestDraft": {
+      "description": "An executable request.",
+      "type": "object",
+      "properties": {
+        "auth": {
+          "$ref": "#/$defs/AuthConfig"
+        },
+        "body": {
+          "$ref": "#/$defs/BodyValue"
+        },
+        "cookies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KeyValue"
+          }
+        },
+        "folder": {
+          "description": "Where the request sits inside its collection: `Users/Admin`. A path rather than a\ntree, so the collection file stays a flat list and a move is a one-line diff.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "headers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KeyValue"
+          }
+        },
+        "id": {
+          "description": "Generated when absent, so a hand-written or agent-written flow need not invent one.",
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
+          "$ref": "#/$defs/HttpMethod"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path_values": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "query": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KeyValue"
+          }
+        },
+        "settings": {
+          "$ref": "#/$defs/RequestSettings"
+        },
+        "spec_ref": {
+          "description": "The spec this came from, when it came from discovery.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EndpointId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "url": {
+          "description": "May contain `{{variables}}` and `{path_param}` placeholders.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "url"
+      ]
+    },
+    "RequestId": {
+      "type": "string"
+    },
+    "RequestSettings": {
+      "description": "Per-request transport settings.\n\nDeliberately per-request, never global: disabling certificate verification for one call\nagainst localhost must not silently weaken a later call to production.",
+      "type": "object",
+      "properties": {
+        "follow_redirects": {
+          "description": "Off by default — an API client should show what the server actually returned, and\nfollowing a redirect can forward an `Authorization` header to an unintended host.",
+          "type": "boolean",
+          "default": false
+        },
+        "max_redirects": {
+          "type": "integer",
+          "format": "uint8",
+          "default": 10,
+          "maximum": 255,
+          "minimum": 0
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 30000,
+          "minimum": 0
+        }
+      }
+    },
+    "Variable": {
+      "description": "One `name = value` pair declared by a [`NodeKind::Variables`] block. The value may\nreference other variables.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  }
+}

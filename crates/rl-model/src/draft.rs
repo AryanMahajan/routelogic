@@ -8,11 +8,14 @@ use crate::method::HttpMethod;
 use crate::path::ParamStyle;
 use crate::spec::{ApiKeyLocation, EndpointId, EndpointSpec};
 use crate::vars::{ResolveError, Resolved, VariableContext};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 pub struct RequestId(String);
 
 impl RequestId {
@@ -30,7 +33,7 @@ impl RequestId {
 ///
 /// `enabled` is stored rather than the row being deleted, so toggling a parameter off
 /// produces a one-word diff in a committed collection instead of a removed line.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct KeyValue {
     pub key: String,
     #[serde(default)]
@@ -43,6 +46,12 @@ pub struct KeyValue {
 
 fn default_true() -> bool {
     true
+}
+
+/// A generated default is different every time; stating one in the schema would make the
+/// published schema change on every build and suggest a value nobody should copy.
+fn without_default(schema: &mut schemars::Schema) {
+    schema.remove("default");
 }
 
 impl KeyValue {
@@ -66,7 +75,7 @@ impl KeyValue {
 /// Auth is structured rather than written as a raw header. That is what lets a request
 /// round-trip: an environment switch can swap the token, and export can re-render the header
 /// correctly. A hand-written `Authorization` header cannot be reasoned about.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AuthConfig {
     #[default]
@@ -94,7 +103,7 @@ impl AuthConfig {
 }
 
 /// One part of a multipart body.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FormPart {
     Text {
@@ -114,7 +123,7 @@ pub enum FormPart {
 }
 
 /// A request body.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum BodyValue {
     #[default]
@@ -167,7 +176,7 @@ impl BodyValue {
 ///
 /// Deliberately per-request, never global: disabling certificate verification for one call
 /// against localhost must not silently weaken a later call to production.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RequestSettings {
     /// Off by default — an API client should show what the server actually returned, and
     /// following a redirect can forward an `Authorization` header to an unintended host.
@@ -215,8 +224,11 @@ impl RequestSettings {
 }
 
 /// An executable request.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RequestDraft {
+    /// Generated when absent, so a hand-written or agent-written flow need not invent one.
+    #[serde(default = "RequestId::new")]
+    #[schemars(transform = without_default)]
     pub id: RequestId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,

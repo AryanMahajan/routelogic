@@ -406,13 +406,28 @@ fn ignores_routelogic(gitignore: &str) -> bool {
     })
 }
 
+/// Write a file whole or not at all: into a hidden sibling, then renamed over the target.
+///
+/// Two processes share a workspace — the app, and an agent's MCP server — and the app
+/// watches the directory. A reader must never see half a file, and a crash mid-write must
+/// not leave one behind. The sibling starts with a dot and ends in `.tmp`, so neither the
+/// flow list nor the watcher mistakes it for a document.
 fn write_file(path: &Path, contents: &str) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| WorkspaceError::io(format!("creating {}", parent.display()), e))?;
-    }
-    std::fs::write(path, contents)
-        .map_err(|e| WorkspaceError::io(format!("writing {}", path.display()), e))
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent)
+        .map_err(|e| WorkspaceError::io(format!("creating {}", parent.display()), e))?;
+
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let temporary = parent.join(format!(".{name}.{}.tmp", std::process::id()));
+    std::fs::write(&temporary, contents)
+        .map_err(|e| WorkspaceError::io(format!("writing {}", temporary.display()), e))?;
+    std::fs::rename(&temporary, path).map_err(|e| {
+        let _ = std::fs::remove_file(&temporary);
+        WorkspaceError::io(format!("writing {}", path.display()), e)
+    })
 }
 
 /// The display names of every YAML file in a directory, sorted.

@@ -33,6 +33,7 @@
 //! lets the canvas jump from a card to the handler that serves it.
 
 use crate::draft::RequestDraft;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -43,7 +44,11 @@ pub const HANDLE_TRUE: &str = "true";
 /// The output of a [`NodeKind::Condition`] taken when the predicate does not hold.
 pub const HANDLE_FALSE: &str = "false";
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+/// Any string, unique within the flow. The canvas makes UUIDs; a hand-written flow can use
+/// words — `login`, `create_user` — which read better in an edge list.
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 pub struct NodeId(String);
 
 impl NodeId {
@@ -68,14 +73,14 @@ impl std::fmt::Display for NodeId {
 }
 
 /// Where a node sits on the canvas. Part of the document, never part of its meaning.
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Position {
     pub x: f64,
     pub y: f64,
 }
 
 /// Where a value comes from — for an extraction or the left side of an assertion.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "from", rename_all = "snake_case")]
 pub enum ValueSource {
     /// The HTTP status code, as a number.
@@ -95,7 +100,7 @@ pub enum ValueSource {
 }
 
 /// Turn part of a response into a variable for the nodes that follow.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Extraction {
     /// The variable name later nodes reference as `{{name}}`.
     pub name: String,
@@ -107,7 +112,7 @@ pub struct Extraction {
 ///
 /// When both sides parse as numbers the comparison is numeric, so `"200"` equals `200` and
 /// `"9"` is not greater than `"10"`. Otherwise it is a plain string comparison.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Operator {
     Equals,
@@ -154,7 +159,7 @@ impl Operator {
 }
 
 /// A check on a response. Any failing assertion fails its node.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Assertion {
     #[serde(flatten)]
     pub source: ValueSource,
@@ -177,7 +182,7 @@ impl Assertion {
 
 /// One `name = value` pair declared by a [`NodeKind::Variables`] block. The value may
 /// reference other variables.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Variable {
     pub name: String,
     #[serde(default)]
@@ -188,7 +193,7 @@ pub struct Variable {
 // Nearly every node is a request; boxing the common case to slim the rare one would be
 // the wrong trade, and a flow holds a handful of nodes, not millions.
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum NodeKind {
     /// Send a request, then extract and assert on what came back.
@@ -218,14 +223,16 @@ pub enum NodeKind {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Node {
     pub id: NodeId,
     /// A label for the card. Falls back to the request's name or display in the UI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(default)]
-    pub position: Position,
+    /// Where the card sits. Leave it out and the node is placed by [`Flow::lay_out`] the
+    /// next time the flow is loaded or saved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<Position>,
     #[serde(flatten)]
     pub kind: NodeKind,
 }
@@ -235,7 +242,7 @@ impl Node {
         Node {
             id: NodeId::new(),
             name: None,
-            position: Position::default(),
+            position: None,
             kind: NodeKind::Request {
                 request,
                 extract: Vec::new(),
@@ -248,7 +255,7 @@ impl Node {
         Node {
             id: NodeId::new(),
             name: None,
-            position: Position::default(),
+            position: None,
             kind: NodeKind::Condition {
                 left: left.into(),
                 op,
@@ -261,7 +268,7 @@ impl Node {
         Node {
             id: NodeId::new(),
             name: None,
-            position: Position::default(),
+            position: None,
             kind: NodeKind::Variables {
                 variables: pairs
                     .iter()
@@ -278,13 +285,13 @@ impl Node {
         Node {
             id: NodeId::new(),
             name: None,
-            position: Position::default(),
+            position: None,
             kind: NodeKind::Display { text: text.into() },
         }
     }
 
     pub fn at(mut self, x: f64, y: f64) -> Self {
-        self.position = Position { x, y };
+        self.position = Some(Position { x, y });
         self
     }
 
@@ -308,7 +315,7 @@ impl Node {
 }
 
 /// A dependency: `to` runs after `from`, and only if `from` passed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Edge {
     pub from: NodeId,
     pub to: NodeId,
@@ -334,7 +341,7 @@ impl Edge {
 }
 
 /// A saved flow: one file.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Flow {
     #[serde(default = "default_version")]
     pub version: u32,
@@ -509,6 +516,82 @@ impl Flow {
             .into_iter()
             .map(|i| self.nodes[i].id.clone())
             .collect())
+    }
+
+    /// Give every node without a [`Position`] one, and return how many were placed.
+    ///
+    /// Columns follow dependency depth — the longest chain of edges leading into a node —
+    /// and rows follow document order within a column, so a chain reads left to right and
+    /// a fan-out stacks. Nodes that already have a position are never moved: a flow laid out
+    /// by hand stays as it was, and anything new is placed below it. A graph with a cycle
+    /// cannot be layered, and is laid out as one column in document order instead.
+    pub fn lay_out(&mut self) -> usize {
+        const COLUMN: f64 = 340.0;
+        const ROW: f64 = 190.0;
+        const GAP: f64 = 260.0;
+
+        let unplaced: Vec<usize> = (0..self.nodes.len())
+            .filter(|&i| self.nodes[i].position.is_none())
+            .collect();
+        if unplaced.is_empty() {
+            return 0;
+        }
+
+        let depth = self.depths();
+
+        // Rows are counted among the nodes being placed, so new cards do not leave gaps
+        // for placed ones that sit elsewhere.
+        let mut rows: BTreeMap<usize, usize> = BTreeMap::new();
+        let mut layered = Vec::with_capacity(unplaced.len());
+        for &i in &unplaced {
+            let column = depth[i];
+            let row = rows.entry(column).or_insert(0);
+            layered.push((i, column as f64 * COLUMN, *row as f64 * ROW));
+            *row += 1;
+        }
+
+        // Beside nothing, the layout starts at the origin; beside a flow already laid out,
+        // it starts at that flow's left edge, a gap below its lowest card.
+        let placed: Vec<Position> = self.nodes.iter().filter_map(|n| n.position).collect();
+        let origin = match placed.iter().map(|p| p.x).reduce(f64::min) {
+            Some(left) => Position {
+                x: left,
+                y: placed.iter().map(|p| p.y).fold(f64::MIN, f64::max) + GAP,
+            },
+            None => Position::default(),
+        };
+
+        for (i, x, y) in &layered {
+            self.nodes[*i].position = Some(Position {
+                x: origin.x + x,
+                y: origin.y + y,
+            });
+        }
+        layered.len()
+    }
+
+    /// Each node's column: the length of the longest edge chain leading into it. Every node
+    /// is column 0 when the graph has a cycle, since then there is no chain to measure.
+    fn depths(&self) -> Vec<usize> {
+        let mut depth = vec![0usize; self.nodes.len()];
+        let Ok(order) = self.topological_order() else {
+            return depth;
+        };
+        let index: BTreeMap<&NodeId, usize> = self
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (&n.id, i))
+            .collect();
+        for id in &order {
+            let Some(&to) = index.get(id) else { continue };
+            for edge in self.upstream(id) {
+                if let Some(&from) = index.get(&edge.from) {
+                    depth[to] = depth[to].max(depth[from] + 1);
+                }
+            }
+        }
+        depth
     }
 }
 
@@ -695,6 +778,90 @@ mod tests {
         assert_eq!(
             flow.execution_order().unwrap(),
             vec![inputs, login, me, mid, user]
+        );
+    }
+
+    #[test]
+    fn a_flow_without_positions_is_laid_out_left_to_right_by_dependency() {
+        let mut flow = Flow::new("fan");
+        let login = flow.add(get("/login"));
+        let a = flow.add(get("/a"));
+        let b = flow.add(get("/b"));
+        let done = flow.add(Node::display("done"));
+        flow.connect(&login, &a);
+        flow.connect(&login, &b);
+        flow.connect(&a, &done);
+        flow.connect(&b, &done);
+
+        assert_eq!(flow.lay_out(), 4);
+        let at = |id: &NodeId| flow.node(id).unwrap().position.unwrap();
+        assert_eq!((at(&login).x, at(&login).y), (0.0, 0.0));
+        assert_eq!(at(&a).x, at(&b).x, "siblings share a column");
+        assert!(at(&b).y > at(&a).y, "and stack in document order");
+        assert!(
+            at(&done).x > at(&a).x,
+            "what depends on them sits to the right"
+        );
+        assert_eq!(flow.lay_out(), 0, "nothing left to place");
+    }
+
+    #[test]
+    fn laying_out_never_moves_a_placed_node_and_puts_new_ones_below() {
+        let mut flow = Flow::new("mixed");
+        let kept = flow.add(get("/kept").at(500.0, 40.0));
+        let new = flow.add(get("/new"));
+        flow.lay_out();
+        assert_eq!(
+            flow.node(&kept).unwrap().position,
+            Some(Position { x: 500.0, y: 40.0 })
+        );
+        let placed = flow.node(&new).unwrap().position.unwrap();
+        assert_eq!(placed.x, 500.0, "aligned with the flow already there");
+        assert!(placed.y > 40.0, "below it, not on top of it");
+    }
+
+    #[test]
+    fn a_hand_written_flow_needs_no_ids_or_positions_beyond_its_own_names() {
+        let yaml = r#"{
+            "name": "written by hand",
+            "nodes": [
+                {"id": "login", "type": "request",
+                 "request": {"method": "POST", "url": "{{base_url}}/login"},
+                 "extract": [{"name": "token", "from": "body", "path": "token"}],
+                 "assert": [{"from": "status", "op": "equals", "expected": "200"}]},
+                {"id": "me", "type": "request",
+                 "request": {"method": "GET", "url": "{{base_url}}/me"}}
+            ],
+            "edges": [{"from": "login", "to": "me"}]
+        }"#;
+        let mut flow: Flow = serde_json::from_str(yaml).unwrap();
+        flow.validate().unwrap();
+        assert!(flow.nodes.iter().all(|n| n.position.is_none()));
+        let NodeKind::Request { request, .. } = &flow.nodes[0].kind else {
+            panic!("a request")
+        };
+        assert!(!request.id.as_str().is_empty(), "a request id is generated");
+        flow.lay_out();
+        assert!(flow.nodes.iter().all(|n| n.position.is_some()));
+    }
+
+    /// `docs/flow.schema.json` is what agents and editors validate against, so it must be
+    /// what the code actually accepts. Regenerate with `UPDATE_SNAPSHOTS=1`.
+    #[test]
+    fn the_published_schema_matches_the_model() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/flow.schema.json");
+        let schema = serde_json::to_string_pretty(&schemars::schema_for!(Flow)).unwrap() + "\n";
+        if std::env::var("UPDATE_SNAPSHOTS").is_ok() {
+            std::fs::write(&path, &schema).unwrap();
+            return;
+        }
+        let published = std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .replace("\r\n", "\n");
+        assert!(
+            published == schema,
+            "docs/flow.schema.json is out of date; regenerate with UPDATE_SNAPSHOTS=1 cargo test -p rl-model"
         );
     }
 

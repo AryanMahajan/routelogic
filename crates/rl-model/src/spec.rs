@@ -13,7 +13,9 @@ use std::path::PathBuf;
 ///
 /// Derived from method and path *shape*, so it survives a rescan: renaming a handler or
 /// moving it to another file does not break a saved request's `spec_ref`.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, schemars::JsonSchema,
+)]
 pub struct EndpointId(String);
 
 impl EndpointId {
@@ -184,7 +186,7 @@ impl BodySchema {
 }
 
 /// Where an API key travels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ApiKeyLocation {
     Header,

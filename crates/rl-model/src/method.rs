@@ -24,6 +24,22 @@ pub enum HttpMethod {
     Other(String),
 }
 
+/// Written by hand: the catch-all [`HttpMethod::Other`] is untagged, so on the wire every
+/// method is simply a string, which is what the schema should say.
+impl schemars::JsonSchema for HttpMethod {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "HttpMethod".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "An HTTP method, upper case. Any token is accepted; these are the usual ones.",
+            "examples": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+        })
+    }
+}
+
 impl HttpMethod {
     /// Every method that a framework adapter may emit without an explicit method list.
     pub const COMMON: [HttpMethod; 8] = [

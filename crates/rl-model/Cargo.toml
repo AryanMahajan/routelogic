@@ -12,4 +12,5 @@ repository.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+schemars = "1"
 uuid = { version = "1", features = ["v4", "serde"] }

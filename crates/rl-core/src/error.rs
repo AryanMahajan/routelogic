@@ -35,6 +35,9 @@ pub enum CoreError {
     #[error("a flow named {name:?} already exists")]
     FlowExists { name: String },
 
+    #[error("no environment named {name:?}")]
+    NoSuchEnvironment { name: String },
+
     /// The graph cannot be run as drawn. Refused before the first request goes out.
     #[error("the flow cannot run: {0}")]
     Flow(#[from] rl_model::FlowError),

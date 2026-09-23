@@ -533,12 +533,60 @@ impl RouteLogic {
         Ok(self.workspace()?.flow_names()?)
     }
 
+    /// Load a flow, placing any node written without a position — by hand, or by an
+    /// agent — so the canvas never receives a card with nowhere to go.
     pub fn load_flow(&self, name: &str) -> Result<Flow> {
-        Ok(self.workspace()?.load_flow(name)?)
+        let mut flow = self.workspace()?.load_flow(name)?;
+        flow.lay_out();
+        Ok(flow)
     }
 
+    /// Save a flow, placing unplaced nodes first, so what is on disk is what the canvas
+    /// will show.
     pub fn save_flow(&self, flow: &Flow) -> Result<()> {
-        Ok(self.workspace()?.save_flow(flow)?)
+        let mut flow = flow.clone();
+        flow.lay_out();
+        Ok(self.workspace()?.save_flow(&flow)?)
+    }
+
+    /// Where a flow is stored, whether or not it exists yet.
+    pub fn flow_path(&self, name: &str) -> Result<PathBuf> {
+        Ok(self.workspace()?.layout().flow_file(name)?)
+    }
+
+    /// Mistakes that would only show when `flow` runs, checked against the variables of
+    /// `environment` (the active one when `None`) and the endpoints of the last scan.
+    pub fn lint_flow(
+        &self,
+        flow: &Flow,
+        environment: Option<&str>,
+    ) -> Result<Vec<rl_flow::Warning>> {
+        let variables = self.variables_for(environment)?;
+        let endpoints: Option<std::collections::BTreeSet<String>> =
+            self.last_scan.as_ref().map(|scan| {
+                scan.endpoints
+                    .iter()
+                    .map(|e| e.id.as_str().to_string())
+                    .collect()
+            });
+        Ok(rl_flow::lint(flow, &variables, endpoints.as_ref()))
+    }
+
+    /// The variables a request would resolve against in `environment`, or in the active
+    /// environment when `None` — without changing which one is active.
+    pub fn variables_for(&self, environment: Option<&str>) -> Result<VariableContext> {
+        let Some(workspace) = self.workspace.as_ref() else {
+            return Ok(VariableContext::new());
+        };
+        let name = environment.or(self.active_environment.as_deref());
+        if let Some(name) = environment {
+            if !workspace.environment_names()?.iter().any(|n| n == name) {
+                return Err(CoreError::NoSuchEnvironment {
+                    name: name.to_string(),
+                });
+            }
+        }
+        Ok(workspace.variable_context(name)?)
     }
 
     pub fn delete_flow(&self, name: &str) -> Result<()> {
@@ -1448,7 +1496,11 @@ mod tests {
         )));
         app.save_flow(&flow).unwrap();
         assert_eq!(app.info().unwrap().flows, vec!["smoke"]);
-        assert_eq!(app.load_flow("smoke").unwrap(), flow);
+        // Saved with the node placed, since it was added without a position.
+        let mut placed = flow.clone();
+        placed.lay_out();
+        assert_eq!(app.load_flow("smoke").unwrap(), placed);
+        flow = placed;
 
         app.rename_flow("smoke", "health check").unwrap();
         assert_eq!(app.flow_names().unwrap(), vec!["health check"]);
@@ -1462,6 +1514,86 @@ mod tests {
 
         app.delete_flow("health check").unwrap();
         assert_eq!(app.flow_names().unwrap(), vec!["other"]);
+    }
+
+    /// A flow written by hand — or by an agent — without positions opens with every card
+    /// placed, and saving it writes the placement down, leaving no stray temporary file.
+    #[test]
+    fn a_flow_written_without_positions_is_placed_on_load_and_on_save() {
+        let (_dir, app) = app();
+        let path = app.flow_path("by hand").unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            concat!(
+                "name: by hand
+",
+                "nodes:
+",
+                "- id: health
+",
+                "  type: request
+",
+                "  request: {method: GET, url: '{{base_url}}/health'}
+",
+                "- id: users
+",
+                "  type: request
+",
+                "  request: {method: GET, url: '{{base_url}}/users'}
+",
+                "edges:
+",
+                "- {from: health, to: users}
+",
+            ),
+        )
+        .unwrap();
+
+        let loaded = app.load_flow("by hand").unwrap();
+        assert!(loaded.nodes.iter().all(|n| n.position.is_some()));
+
+        app.save_flow(&loaded).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("position:"), "{text}");
+        let leftovers: Vec<_> = std::fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "the atomic write cleaned up after itself"
+        );
+    }
+
+    #[test]
+    fn lint_checks_a_flow_against_the_chosen_environment() {
+        let (_dir, app) = app();
+        let mut env = rl_workspace::Environment::new("local");
+        env.set("base_url", "http://localhost:8000");
+        app.save_environment(&env).unwrap();
+        app.save_environment(&rl_workspace::Environment::new("staging"))
+            .unwrap();
+        let active = app.active_environment().map(str::to_string);
+
+        let mut flow = Flow::new("lint");
+        flow.add(rl_model::Node::request(RequestDraft::new(
+            HttpMethod::Get,
+            "{{base_url}}/users/{{user_id}}",
+        )));
+        let warnings = app.lint_flow(&flow, Some("local")).unwrap();
+        let text: Vec<&str> = warnings.iter().map(|w| w.message.as_str()).collect();
+        assert!(text.iter().any(|m| m.contains("{{user_id}}")), "{text:?}");
+        assert!(!text.iter().any(|m| m.contains("{{base_url}}")), "{text:?}");
+        assert!(text.iter().any(|m| m.contains("no assertions")));
+
+        assert!(matches!(
+            app.lint_flow(&flow, Some("nowhere")),
+            Err(CoreError::NoSuchEnvironment { .. })
+        ));
+        // Checking against an environment does not switch to it.
+        assert_eq!(app.active_environment().map(str::to_string), active);
     }
 
     #[test]
