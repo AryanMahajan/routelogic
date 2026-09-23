@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, CoreError } from "./api";
+import { api, CoreError, onWorkspaceChanged } from "./api";
 import {
   addNode,
   applyEvent,
@@ -73,6 +73,11 @@ interface FlowTab {
   run: FlowRun | null;
   running: boolean;
   error: string | null;
+  /**
+   * The file changed on disk while this tab had unsaved edits — an agent rewrote it, a
+   * branch was switched. Nothing is reloaded over the edits; the tab says so and asks.
+   */
+  external: "changed" | "removed" | null;
 }
 
 type Tab = RequestTab | FlowTab;
@@ -103,6 +108,7 @@ function newFlowTab(flow: Flow, savedName: string | null): FlowTab {
     run: null,
     running: false,
     error: null,
+    external: null,
   };
 }
 
@@ -189,6 +195,45 @@ export default function App() {
     },
     [updateFlowTab],
   );
+
+  // Another process changed the workspace — an agent writing a flow, a branch switch.
+  // Everything listed is reloaded; an open flow follows its file when it has no unsaved
+  // edits (as an undoable step, so Ctrl+Z brings back what was there), and says so when it
+  // does, rather than silently keeping a stale copy that the next save would write back.
+  useEffect(() => {
+    if (!workspace) return;
+    return onWorkspaceChanged((change) => {
+      refresh();
+      if (change.kind !== "flow") return;
+      const open = tabs.filter((t): t is FlowTab => t.kind === "flow" && t.savedName === change.name);
+      for (const tab of open) {
+        if (change.removed) {
+          updateFlowTab(tab.id, (t) => ({ ...t, external: "removed" }));
+        } else if (isDirty(tab)) {
+          updateFlowTab(tab.id, (t) => ({ ...t, external: "changed" }));
+        } else {
+          void reloadFlowTab(tab.id, change.name);
+        }
+      }
+    });
+  }, [workspace, tabs, refresh, updateFlowTab]);
+
+  async function reloadFlowTab(id: string, name: string) {
+    try {
+      const flow = await api.loadFlow(name);
+      updateFlowTab(id, (t) => ({
+        ...t,
+        flow,
+        saved: JSON.stringify(flow),
+        history: record(t.history, t.flow, Date.now()),
+        selected: t.selected && flow.nodes.some((n) => n.id === t.selected) ? t.selected : null,
+        external: null,
+        error: null,
+      }));
+    } catch (e) {
+      updateFlowTab(id, (t) => ({ ...t, error: describe(e) }));
+    }
+  }
 
   function undoFlow(id: string) {
     updateFlowTab(id, (t) => {
@@ -476,7 +521,7 @@ export default function App() {
         throw new CoreError(`A flow named "${name}" already exists. Pick another name.`);
       }
       await api.saveFlow(flow);
-      updateFlowTab(tab.id, (t) => ({ ...t, flow, saved: JSON.stringify(flow), savedName: name, error: null }));
+      updateFlowTab(tab.id, (t) => ({ ...t, flow, saved: JSON.stringify(flow), savedName: name, error: null, external: null }));
       refresh();
     } catch (e) {
       updateFlowTab(tab.id, (t) => ({ ...t, error: describe(e) }));
@@ -705,6 +750,9 @@ export default function App() {
               selected={active.selected}
               scan={scan}
               error={active.error}
+              external={active.external}
+              onReloadExternal={() => active.savedName && void reloadFlowTab(active.id, active.savedName)}
+              onKeepMine={() => updateFlowTab(active.id, (t) => ({ ...t, external: null }))}
               onChange={(update) => editFlow(active.id, update)}
               onSelect={(id) => updateFlowTab(active.id, (t) => (t.selected === id ? t : { ...t, selected: id }))}
               onAdd={(pick, at) => addToFlow(active, pick, at ?? null)}

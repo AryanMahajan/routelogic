@@ -194,6 +194,14 @@ export interface Exchange {
   response: HttpResponse;
 }
 
+/** A document another process changed on disk — an agent, git, an editor. */
+export interface WorkspaceChange {
+  kind: "flow" | "collection" | "environment" | "workspace";
+  /** The document's name; empty for the workspace manifest. */
+  name: string;
+  removed: boolean;
+}
+
 export interface WorkspaceInfo {
   name: string;
   root: string;

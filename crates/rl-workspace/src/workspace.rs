@@ -241,6 +241,7 @@ impl Workspace {
         if !path.is_file() {
             return Err(WorkspaceError::NoSuchCollection(name.to_string()));
         }
+        crate::watch::remember_delete(&path);
         std::fs::remove_file(&path)
             .map_err(|e| WorkspaceError::io(format!("removing {}", path.display()), e))
     }
@@ -269,6 +270,7 @@ impl Workspace {
         if !path.is_file() {
             return Err(WorkspaceError::NoSuchEnvironment(name.to_string()));
         }
+        crate::watch::remember_delete(&path);
         std::fs::remove_file(&path)
             .map_err(|e| WorkspaceError::io(format!("deleting {}", path.display()), e))
     }
@@ -299,6 +301,7 @@ impl Workspace {
         if !path.is_file() {
             return Err(WorkspaceError::NoSuchFlow(name.to_string()));
         }
+        crate::watch::remember_delete(&path);
         std::fs::remove_file(&path)
             .map_err(|e| WorkspaceError::io(format!("deleting {}", path.display()), e))
     }
@@ -424,6 +427,7 @@ fn write_file(path: &Path, contents: &str) -> Result<()> {
     let temporary = parent.join(format!(".{name}.{}.tmp", std::process::id()));
     std::fs::write(&temporary, contents)
         .map_err(|e| WorkspaceError::io(format!("writing {}", temporary.display()), e))?;
+    crate::watch::remember_write(path, contents.as_bytes());
     std::fs::rename(&temporary, path).map_err(|e| {
         let _ = std::fs::remove_file(&temporary);
         WorkspaceError::io(format!("writing {}", path.display()), e)

@@ -11,11 +11,11 @@ use rl_core::{EnrichProposal, ProjectScan, RouteLogic, SaveAllReport, WorkspaceI
 use rl_flow::{FlowEvent, FlowRun, RunOptions};
 use rl_http::{Exchange, PreparedRequest};
 use rl_model::{Flow, RequestDraft};
-use rl_workspace::{Collection, Environment, HistoryEntry, WorkspaceKind};
+use rl_workspace::{Collection, Environment, HistoryEntry, Watcher, WorkspaceKind};
 use serde::Serialize;
 use std::path::PathBuf;
 use tauri::ipc::Channel;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 /// Application state.
@@ -24,6 +24,22 @@ use tokio::sync::Mutex;
 /// is held across an await point.
 struct AppState {
     app: Mutex<RouteLogic>,
+    /// Watches the open workspace for changes made elsewhere — by an agent, by git — and
+    /// forwards them to the UI as `workspace-changed`. Replaced whenever a workspace opens.
+    watcher: std::sync::Mutex<Option<Watcher>>,
+}
+
+/// Start watching whatever workspace is now open, replacing any earlier watcher. A failure
+/// to watch is not a failure to open: the app works without it, it just will not notice
+/// changes made elsewhere.
+fn watch_workspace(handle: &AppHandle, state: &AppState, app: &RouteLogic) {
+    let emitter = handle.clone();
+    let watcher = app
+        .watch(move |change| {
+            let _ = emitter.emit("workspace-changed", change);
+        })
+        .ok();
+    *state.watcher.lock().unwrap_or_else(|e| e.into_inner()) = watcher;
 }
 
 /// An error on its way to the UI.
@@ -48,12 +64,20 @@ type CommandResult<T> = std::result::Result<T, CommandError>;
 // --- workspace ---------------------------------------------------------------------------
 
 #[tauri::command]
-async fn open_workspace(state: State<'_, AppState>, path: PathBuf) -> CommandResult<WorkspaceInfo> {
-    Ok(state.app.lock().await.open_workspace(path)?)
+async fn open_workspace(
+    handle: AppHandle,
+    state: State<'_, AppState>,
+    path: PathBuf,
+) -> CommandResult<WorkspaceInfo> {
+    let mut app = state.app.lock().await;
+    let info = app.open_workspace(path)?;
+    watch_workspace(&handle, &state, &app);
+    Ok(info)
 }
 
 #[tauri::command]
 async fn create_workspace(
+    handle: AppHandle,
     state: State<'_, AppState>,
     path: PathBuf,
     name: String,
@@ -64,20 +88,23 @@ async fn create_workspace(
     } else {
         WorkspaceKind::Project
     };
-    Ok(state.app.lock().await.create_workspace(path, name, kind)?)
+    let mut app = state.app.lock().await;
+    let info = app.create_workspace(path, name, kind)?;
+    watch_workspace(&handle, &state, &app);
+    Ok(info)
 }
 
 #[tauri::command]
 async fn open_or_create_workspace(
+    handle: AppHandle,
     state: State<'_, AppState>,
     path: PathBuf,
     name: String,
 ) -> CommandResult<WorkspaceInfo> {
-    Ok(state
-        .app
-        .lock()
-        .await
-        .open_or_create_workspace(path, name, WorkspaceKind::Project)?)
+    let mut app = state.app.lock().await;
+    let info = app.open_or_create_workspace(path, name, WorkspaceKind::Project)?;
+    watch_workspace(&handle, &state, &app);
+    Ok(info)
 }
 
 #[tauri::command]
@@ -88,6 +115,7 @@ async fn workspace_info(state: State<'_, AppState>) -> CommandResult<WorkspaceIn
 #[tauri::command]
 async fn close_workspace(state: State<'_, AppState>) -> CommandResult<()> {
     state.app.lock().await.close_workspace();
+    *state.watcher.lock().unwrap_or_else(|e| e.into_inner()) = None;
     Ok(())
 }
 
@@ -416,6 +444,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             app: Mutex::new(RouteLogic::new()),
+            watcher: std::sync::Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             open_workspace,

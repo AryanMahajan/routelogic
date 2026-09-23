@@ -331,6 +331,19 @@ impl RouteLogic {
         }
     }
 
+    /// Report every change another process — an agent's MCP server, a `git checkout`, an
+    /// editor — makes to the open workspace's flows, environments and collections, until
+    /// the returned watcher is dropped. This process's own saves are not reported.
+    pub fn watch(
+        &self,
+        on_change: impl Fn(rl_workspace::Change) + Send + 'static,
+    ) -> Result<rl_workspace::Watcher> {
+        Ok(rl_workspace::Watcher::start(
+            self.workspace()?.layout(),
+            on_change,
+        )?)
+    }
+
     pub fn close_workspace(&mut self) {
         self.workspace = None;
         self.active_environment = None;

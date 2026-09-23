@@ -34,6 +34,9 @@ export function FlowEditor({
   selected,
   scan,
   error,
+  external,
+  onReloadExternal,
+  onKeepMine,
   onChange,
   onSelect,
   onAdd,
@@ -52,6 +55,10 @@ export function FlowEditor({
   selected: string | null;
   scan: ScanResult | null;
   error: string | null;
+  /** The file changed or vanished on disk while this flow had unsaved edits. */
+  external: "changed" | "removed" | null;
+  onReloadExternal: () => void;
+  onKeepMine: () => void;
   onChange: (update: FlowUpdate) => void;
   onSelect: (id: string | null) => void;
   /**
@@ -198,6 +205,27 @@ export function FlowEditor({
           Save
         </button>
       </div>
+
+      {external && (
+        <div
+          role="alert"
+          className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-edge bg-method-post/10 px-3 py-1.5 text-[11px]"
+        >
+          <span className="text-ink">
+            {external === "changed"
+              ? "This flow changed on disk while you had unsaved edits."
+              : "This flow was deleted on disk. Save to write it back."}
+          </span>
+          {external === "changed" && (
+            <button onClick={onReloadExternal} className="rounded bg-raised px-2 py-0.5 transition hover:brightness-125">
+              Reload
+            </button>
+          )}
+          <button onClick={onKeepMine} className="rounded px-2 py-0.5 text-muted transition hover:text-ink">
+            {external === "changed" ? "Keep mine" : "Dismiss"}
+          </button>
+        </div>
+      )}
 
       {(run || cyclic || error) && (
         <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-edge bg-panel/60 px-3 py-1.5 text-[11px]">

@@ -6,6 +6,7 @@
  */
 
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { PreparedRequest } from "./codegen";
 import {
   normalizeFlow,
@@ -30,6 +31,7 @@ import {
   type RequestDraft,
   type WireCollection,
   type WireRequestDraft,
+  type WorkspaceChange,
   type WorkspaceInfo,
 } from "./types";
 
@@ -51,6 +53,30 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 /** `enrichable` and `enrich` are skipped on the wire when false/absent. */
 function normalizeScan(wire: ScanResult): ScanResult {
   return { ...wire, enrichable: wire.enrichable ?? false, enrich: wire.enrich ?? null };
+}
+
+/**
+ * Call `handler` for every document another process changes in the open workspace. Returns
+ * the unsubscribe function. Outside the desktop shell — the browser harness — there are no
+ * events, and this quietly does nothing.
+ */
+export function onWorkspaceChanged(handler: (change: WorkspaceChange) => void): () => void {
+  let unlisten: (() => void) | null = null;
+  let cancelled = false;
+  try {
+    void listen<WorkspaceChange>("workspace-changed", (event) => handler(event.payload))
+      .then((stop) => {
+        if (cancelled) stop();
+        else unlisten = stop;
+      })
+      .catch(() => {});
+  } catch {
+    // No event bridge: not running inside Tauri.
+  }
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
 }
 
 export const api = {
