@@ -79,4 +79,6 @@ pub use history::{History, HistoryEntry, NewEntry, RedactedEntry};
 pub use layout::{default_data_dir, Layout, DATA_DIR_ENV};
 pub use secrets::{FileSecretStore, SecretStore};
 pub use watch::{Change, ChangeKind, Watcher};
-pub use workspace::{ProjectRef, Workspace, WorkspaceKind, WorkspaceManifest};
+pub use workspace::{
+    AgentAllow, AgentConfig, ProjectRef, Workspace, WorkspaceKind, WorkspaceManifest,
+};

@@ -65,10 +65,25 @@ impl HttpEngine {
     /// The draft is expected to be already resolved — see [`rl_model::RequestDraft::resolve`].
     /// Resolution happens as late as possible, and this is the last stop before the wire.
     pub async fn execute(&self, draft: &RequestDraft) -> Result<Exchange> {
+        self.execute_guarded(draft, &|_, _| Ok(())).await
+    }
+
+    /// [`HttpEngine::execute`], asking `guard` before every request goes out: the first,
+    /// and each redirect it leads to. A redirect is where an allowed host hands a request
+    /// to one that is not, so checking only the first would check nothing.
+    ///
+    /// The guard sees the method and the full URL and returns why it refuses; the send
+    /// then fails with [`HttpError::Refused`] and nothing reaches the refused host.
+    pub async fn execute_guarded(
+        &self,
+        draft: &RequestDraft,
+        guard: &(dyn Fn(&str, &Url) -> std::result::Result<(), String> + Sync),
+    ) -> Result<Exchange> {
         let client = self.client(&draft.settings)?;
         let method = Method::from_bytes(draft.method.as_str().as_bytes()).unwrap_or(Method::GET);
 
         let mut url = build_url(draft)?;
+        guard(method.as_str(), &url).map_err(|reason| HttpError::Refused { reason })?;
         let mut headers = build_headers(draft)?;
         let mut current_method = method.clone();
         let mut redirects: Vec<Hop> = Vec::new();
@@ -171,6 +186,8 @@ impl HttpEngine {
                     headers.remove(reqwest::header::CONTENT_LENGTH);
                 }
 
+                guard(current_method.as_str(), &next)
+                    .map_err(|reason| HttpError::Refused { reason })?;
                 url = next;
                 continue;
             }

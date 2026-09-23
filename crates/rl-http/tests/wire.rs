@@ -307,6 +307,56 @@ async fn redirects_are_followed_when_asked_and_the_chain_is_recorded() {
     assert!(exchange.response.redirects[1].to.ends_with("/c"));
 }
 
+// --- guards -----------------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_guard_that_refuses_sends_nothing() {
+    let server = TestServer::start(|_| respond(200, "OK", "{}")).await;
+    let engine = HttpEngine::new();
+
+    let refused = engine
+        .execute_guarded(&get(server.url("/x")), &|method, url| {
+            Err(format!("{method} {} is not allowed", url.path()))
+        })
+        .await;
+
+    match refused {
+        Err(HttpError::Refused { reason }) => assert_eq!(reason, "GET /x is not allowed"),
+        other => panic!("expected a refusal, got {other:?}"),
+    }
+    assert!(server.requests().is_empty(), "nothing reached the server");
+}
+
+/// The case the guard exists for: an allowed first hop redirecting somewhere that is not.
+#[tokio::test]
+async fn a_guard_is_asked_again_before_each_redirect() {
+    let server = TestServer::start(|r| match r.target.as_str() {
+        "/allowed" => redirect(302, "/forbidden"),
+        _ => respond(200, "OK", "{}"),
+    })
+    .await;
+    let engine = HttpEngine::new();
+    let mut draft = get(server.url("/allowed"));
+    draft.settings.follow_redirects = true;
+
+    let refused = engine
+        .execute_guarded(&draft, &|_, url| match url.path() {
+            "/allowed" => Ok(()),
+            other => Err(format!("{other} is off limits")),
+        })
+        .await;
+
+    assert!(
+        matches!(refused, Err(HttpError::Refused { .. })),
+        "{refused:?}"
+    );
+    assert_eq!(
+        server.requests().len(),
+        1,
+        "the redirect target was never requested"
+    );
+}
+
 #[tokio::test]
 async fn a_redirect_loop_stops_at_the_limit() {
     let server = TestServer::start(|_| redirect(302, "/loop")).await;

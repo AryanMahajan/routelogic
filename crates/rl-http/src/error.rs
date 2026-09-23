@@ -34,6 +34,11 @@ pub enum HttpError {
     #[error("a redirect to {location:?} could not be resolved")]
     BadRedirect { location: String },
 
+    /// A guard passed to [`crate::HttpEngine::execute_guarded`] would not let this request —
+    /// or a redirect it led to — go out. Nothing was sent to the refused destination.
+    #[error("refused: {reason}")]
+    Refused { reason: String },
+
     #[error("could not build the HTTP client")]
     Client {
         #[source]

@@ -69,6 +69,37 @@ pub struct WorkspaceManifest {
     /// Workspace globals — variables shared across every environment.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub variables: BTreeMap<String, String>,
+    /// What an agent connected over MCP may send requests to. See `docs/agents.md`.
+    #[serde(default, skip_serializing_if = "AgentConfig::is_empty")]
+    pub agent: AgentConfig,
+}
+
+/// The `agent:` block of `workspace.yaml`.
+///
+/// Loopback hosts are always allowed and need no entry here; this lists the others. It
+/// lives in the workspace, which is per machine — `.routelogic/` is kept out of the
+/// project's git — so granting an agent a staging host is a local decision.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentConfig {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow: Vec<AgentAllow>,
+}
+
+impl AgentConfig {
+    pub fn is_empty(&self) -> bool {
+        self.allow.is_empty()
+    }
+}
+
+/// One host an agent may reach beyond loopback.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentAllow {
+    /// `api.staging.example.com`, `api.example.com:8443` for one port only, or
+    /// `*.example.com` for every subdomain (not the domain itself).
+    pub host: String,
+    /// Upper case. Empty allows every method.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub methods: Vec<rl_model::HttpMethod>,
 }
 
 fn default_version() -> u32 {
@@ -87,6 +118,7 @@ impl WorkspaceManifest {
             },
             default_environment: None,
             variables: BTreeMap::new(),
+            agent: AgentConfig::default(),
         }
     }
 }
@@ -199,6 +231,13 @@ impl Workspace {
 
     pub fn layout(&self) -> &Layout {
         &self.layout
+    }
+
+    /// `workspace.yaml` as it is on disk now, which may differ from what was read at open:
+    /// the agent allow list is edited by hand while an agent is connected, and a change
+    /// has to apply to the next request rather than the next restart.
+    pub fn manifest_on_disk(&self) -> Result<WorkspaceManifest> {
+        read_yaml(&self.layout.manifest())
     }
 
     pub fn manifest(&self) -> &WorkspaceManifest {

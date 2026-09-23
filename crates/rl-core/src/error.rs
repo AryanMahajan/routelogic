@@ -38,6 +38,10 @@ pub enum CoreError {
     #[error("no environment named {name:?}")]
     NoSuchEnvironment { name: String },
 
+    /// Something that should not be able to fail did. Reported rather than panicking.
+    #[error("internal error: {message}")]
+    Internal { message: String },
+
     /// The graph cannot be run as drawn. Refused before the first request goes out.
     #[error("the flow cannot run: {0}")]
     Flow(#[from] rl_model::FlowError),

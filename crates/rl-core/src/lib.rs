@@ -50,6 +50,9 @@
 
 pub mod error;
 
+pub mod agent;
+
+pub use agent::{AgentPolicy, AgentResponse, AgentRun, AgentSend, Refusal};
 pub use error::{CoreError, Result};
 
 use rl_discovery::enrich::{self, AppTarget, Interpreter, Provenance};
@@ -1627,6 +1630,165 @@ mod tests {
             app.prepare_flow(flow, RunOptions::default()),
             Err(CoreError::Flow(_))
         ));
+    }
+
+    // --- agents -------------------------------------------------------------------------
+
+    /// A workspace whose `local` environment points at [`tiny_api`], with the token it hands
+    /// out stored as a secret, and a `prod` environment pointing somewhere an agent may
+    /// not go.
+    async fn agent_app() -> (TempDir, RouteLogic) {
+        let (dir, mut app) = app();
+        let base = tiny_api().await;
+        let mut local = Environment::new("local");
+        local.set("base_url", &base);
+        app.save_environment(&local).unwrap();
+        let mut prod = Environment::new("prod");
+        prod.set("base_url", "https://api.example.invalid");
+        app.save_environment(&prod).unwrap();
+        app.set_active_environment(Some("local")).unwrap();
+        app.set_secret("api_token", "tok-secret-1").unwrap();
+        (dir, app)
+    }
+
+    #[tokio::test]
+    async fn an_agent_send_to_loopback_goes_out_masked_and_is_recorded_as_the_agents() {
+        let (_dir, app) = agent_app().await;
+        let login = RequestDraft::new(HttpMethod::Post, "{{base_url}}/login");
+
+        let sent = app.send_for_agent(&login, None, 10_000).await.unwrap();
+        let AgentSend::Sent { response } = sent else {
+            panic!("expected a response, got {sent:?}")
+        };
+        assert_eq!(response.status, 200);
+        assert!(
+            response.body.contains("{{secret:api_token}}"),
+            "the token is named, not shown: {}",
+            response.body
+        );
+        assert!(!response.body.contains("tok-secret-1"));
+
+        let recorded = app.history(1).unwrap();
+        assert_eq!(recorded[0].source.as_deref(), Some(agent::AGENT_SOURCE));
+    }
+
+    #[tokio::test]
+    async fn an_agent_send_elsewhere_is_refused_before_anything_leaves() {
+        let (_dir, app) = agent_app().await;
+        let draft = RequestDraft::new(HttpMethod::Delete, "{{base_url}}/users/7");
+
+        let refused = app
+            .send_for_agent(&draft, Some("prod"), 10_000)
+            .await
+            .unwrap();
+        let AgentSend::Refused { refusal } = refused else {
+            panic!("expected a refusal, got {refused:?}")
+        };
+        assert_eq!(refusal.host, "api.example.invalid");
+        assert!(refusal.fix.contains("agent.allow"));
+        // Recorded as the agent's attempt, with no response, since nothing went out.
+        let recorded = app.history(10).unwrap();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].status, None);
+        assert!(recorded[0].error.as_deref().unwrap().contains("refused"));
+        assert_eq!(recorded[0].source.as_deref(), Some(agent::AGENT_SOURCE));
+        // Sending in `prod` did not make it the active environment.
+        assert_eq!(app.active_environment(), Some("local"));
+    }
+
+    /// Edited by hand while the agent is connected, and applied to its very next request.
+    #[tokio::test]
+    async fn the_allow_list_is_read_fresh_for_every_request() {
+        let (_dir, app) = agent_app().await;
+        let target = url::Url::parse("https://api.example.invalid/users").unwrap();
+        assert!(app.agent_policy().unwrap().check("GET", &target).is_err());
+
+        let path = app.workspace().unwrap().layout().manifest();
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(
+            &path,
+            text + "agent:\n  allow:\n    - host: api.example.invalid\n      methods: [GET]\n",
+        )
+        .unwrap();
+
+        let policy = app.agent_policy().unwrap();
+        assert!(policy.check("GET", &target).is_ok());
+        assert!(policy.check("DELETE", &target).is_err());
+    }
+
+    /// A flow an agent runs: the loopback steps chain for real, the step aimed elsewhere
+    /// fails and says why, and the token captured along the way comes back masked.
+    #[tokio::test]
+    async fn an_agent_flow_run_refuses_the_step_it_may_not_send_and_masks_the_rest() {
+        use rl_model::{Assertion, Extraction, KeyValue, Node, NodeKind, ValueSource};
+        let (_dir, app) = agent_app().await;
+
+        let mut flow = Flow::new("agent");
+        let mut login = Node::request(RequestDraft::new(HttpMethod::Post, "{{base_url}}/login"));
+        if let NodeKind::Request {
+            extract, assert, ..
+        } = &mut login.kind
+        {
+            extract.push(Extraction {
+                name: "auth_token".into(),
+                source: ValueSource::Body {
+                    path: "access_token".into(),
+                },
+            });
+            assert.push(Assertion::status_ok());
+        }
+        let login = flow.add(login);
+        let mut me = RequestDraft::new(HttpMethod::Get, "{{base_url}}/me");
+        me.headers
+            .push(KeyValue::new("Authorization", "Bearer {{auth_token}}"));
+        let me = flow.add(Node::request(me));
+        let outside = flow.add(Node::request(RequestDraft::new(
+            HttpMethod::Get,
+            "https://api.example.invalid/x",
+        )));
+        flow.connect(&login, &me);
+        flow.connect(&me, &outside);
+
+        let run = app
+            .run_flow_for_agent(&flow, None, RunOptions::default(), 10_000)
+            .await
+            .unwrap();
+
+        let outcomes: Vec<&str> = run.steps.iter().map(|s| s.outcome.as_str()).collect();
+        assert_eq!(outcomes, vec!["passed", "passed", "failed"]);
+        assert_eq!(
+            run.steps[0].extracted,
+            vec![("auth_token".to_string(), "{{secret:api_token}}".to_string())]
+        );
+        let reason = run.steps[2].reason.as_deref().unwrap();
+        assert!(reason.contains("not in the agent allow list"), "{reason}");
+        assert!(!serde_json::to_string(&run)
+            .unwrap()
+            .contains("tok-secret-1"));
+
+        let recorded = app.history(10).unwrap();
+        // All three are the agent's; the refused one has no response, since it never went.
+        assert_eq!(recorded.len(), 3);
+        assert_eq!(recorded[0].status, None);
+        assert!(recorded[0].error.as_deref().unwrap().contains("refused"));
+        assert!(recorded
+            .iter()
+            .all(|e| e.source.as_deref() == Some("agent")));
+    }
+
+    #[tokio::test]
+    async fn prepare_for_an_agent_masks_what_would_be_sent() {
+        use rl_model::KeyValue;
+        let (_dir, app) = agent_app().await;
+        let mut draft = RequestDraft::new(HttpMethod::Get, "{{base_url}}/me");
+        draft.headers.push(KeyValue::new(
+            "Authorization",
+            "Bearer {{secret:api_token}}",
+        ));
+        let prepared = app.prepare_for_agent(&draft, None).unwrap();
+        let text = serde_json::to_string(&prepared).unwrap();
+        assert!(text.contains("Bearer {{secret:api_token}}"), "{text}");
+        assert!(!text.contains("tok-secret-1"));
     }
 
     /// A one-connection-at-a-time HTTP/1.1 server that plays a tiny API: `POST /login`

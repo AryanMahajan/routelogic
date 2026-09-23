@@ -238,6 +238,8 @@ export interface HistoryEntry {
   error?: string | null;
   request: unknown;
   response: unknown;
+  /** `agent` for a request an agent sent over MCP; absent for the user's own. */
+  source?: string | null;
 }
 
 /*

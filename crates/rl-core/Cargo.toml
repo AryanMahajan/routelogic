@@ -14,6 +14,7 @@ rl-discovery.workspace = true
 rl-import.workspace = true
 rl-http.workspace = true
 rl-flow.workspace = true
+url = "2"
 rl-workspace.workspace = true
 serde.workspace = true
 serde_json.workspace = true

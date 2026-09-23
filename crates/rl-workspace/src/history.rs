@@ -17,7 +17,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Bumped when the schema changes, and checked on open.
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 
 /// A history row about to be written.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -36,6 +36,10 @@ pub struct NewEntry {
     pub request: serde_json::Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response: Option<serde_json::Value>,
+    /// Who sent it, when it was not the person at the keyboard: `agent` for a request an
+    /// agent made over MCP.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 impl NewEntry {
@@ -48,6 +52,7 @@ impl NewEntry {
             error: None,
             request: serde_json::Value::Null,
             response: None,
+            source: None,
         }
     }
 
@@ -107,6 +112,8 @@ pub struct HistoryEntry {
     pub error: Option<String>,
     pub request: serde_json::Value,
     pub response: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 impl HistoryEntry {
@@ -131,6 +138,12 @@ impl History {
         }
 
         let conn = Connection::open(path).map_err(|source| WorkspaceError::Database { source })?;
+        // The app and an agent's MCP server may both be writing. Write-ahead logging lets a
+        // reader and a writer overlap, and the timeout makes a brief lock a wait rather than
+        // a failed insert.
+        let _ = conn.query_row("PRAGMA journal_mode = WAL", [], |_| Ok(()));
+        conn.busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(|source| WorkspaceError::Database { source })?;
         let history = History { conn };
         history.migrate()?;
         Ok(history)
@@ -157,11 +170,23 @@ impl History {
                     duration_ms INTEGER,
                     error       TEXT,
                     request     TEXT    NOT NULL,
-                    response    TEXT
+                    response    TEXT,
+                    source      TEXT
                  );
                  CREATE INDEX IF NOT EXISTS history_at ON history (at DESC);",
             )
             .map_err(|source| WorkspaceError::Database { source })?;
+
+        // Version 1 files predate `source`.
+        if self
+            .conn
+            .prepare("SELECT source FROM history LIMIT 0")
+            .is_err()
+        {
+            self.conn
+                .execute("ALTER TABLE history ADD COLUMN source TEXT", [])
+                .map_err(|source| WorkspaceError::Database { source })?;
+        }
 
         self.conn
             .pragma_update(None, "user_version", SCHEMA_VERSION)
@@ -189,8 +214,8 @@ impl History {
 
         self.conn
             .execute(
-                "INSERT INTO history (at, method, url, status, duration_ms, error, request, response)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO history (at, method, url, status, duration_ms, error, request, response, source)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     at,
                     e.method,
@@ -200,7 +225,8 @@ impl History {
                     e.duration_ms.map(|d| d as i64),
                     e.error,
                     request,
-                    response
+                    response,
+                    e.source
                 ],
             )
             .map_err(|source| WorkspaceError::Database { source })?;
@@ -213,7 +239,7 @@ impl History {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT id, at, method, url, status, duration_ms, error, request, response
+                "SELECT id, at, method, url, status, duration_ms, error, request, response, source
                  FROM history ORDER BY id DESC LIMIT ?1",
             )
             .map_err(|source| WorkspaceError::Database { source })?;
@@ -229,7 +255,7 @@ impl History {
     pub fn get(&self, id: i64) -> Result<Option<HistoryEntry>> {
         self.conn
             .query_row(
-                "SELECT id, at, method, url, status, duration_ms, error, request, response
+                "SELECT id, at, method, url, status, duration_ms, error, request, response, source
                  FROM history WHERE id = ?1",
                 [id],
                 row_to_entry,
@@ -282,6 +308,7 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<HistoryEntry> {
         error: row.get(6)?,
         request: serde_json::from_str(&request).unwrap_or(serde_json::Value::Null),
         response: response.and_then(|r| serde_json::from_str(&r).ok()),
+        source: row.get(9)?,
     })
 }
 
@@ -294,6 +321,37 @@ mod tests {
         let mut secrets = BTreeMap::new();
         secrets.insert("api_token".to_string(), "s3cr3t-value".to_string());
         VariableContext::new().with_secrets(secrets)
+    }
+
+    /// A database written before `source` existed opens, gains the column, and keeps
+    /// its rows.
+    #[test]
+    fn a_version_1_database_is_migrated_in_place() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("history.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL,
+                    method TEXT NOT NULL, url TEXT NOT NULL, status INTEGER,
+                    duration_ms INTEGER, error TEXT, request TEXT NOT NULL, response TEXT);
+                 INSERT INTO history (at, method, url, request) VALUES (1, 'GET', '/old', '{}');",
+            )
+            .unwrap();
+        }
+        let history = History::open(&path).unwrap();
+        let mut agent = NewEntry::new("POST", "/new");
+        agent.source = Some("agent".into());
+        history.record(&agent.redacted(&ctx())).unwrap();
+
+        let rows = history.recent(10).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].source.as_deref(), Some("agent"));
+        assert_eq!(
+            (rows[1].url.as_str(), rows[1].source.as_deref()),
+            ("/old", None)
+        );
     }
 
     fn entry() -> NewEntry {

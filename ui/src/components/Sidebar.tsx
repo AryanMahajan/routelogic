@@ -340,10 +340,19 @@ export function Sidebar({
               <div
                 key={entry.id}
                 className="flex items-center gap-2 rounded px-2 py-1.5"
-                title={entry.error ?? undefined}
+                title={
+                  [entry.source === "agent" ? "Sent by an agent over MCP" : null, entry.error]
+                    .filter(Boolean)
+                    .join(" — ") || undefined
+                }
               >
                 <MethodBadge method={entry.method} className="w-12 shrink-0 text-right" />
                 <span className="min-w-0 flex-1 truncate text-muted">{entry.url}</span>
+                {entry.source === "agent" && (
+                  <span className="shrink-0 rounded bg-accent/15 px-1 text-[10px] uppercase tracking-wide text-accent">
+                    agent
+                  </span>
+                )}
                 <span
                   className={`shrink-0 font-mono text-[11px] tabular-nums ${
                     entry.error
