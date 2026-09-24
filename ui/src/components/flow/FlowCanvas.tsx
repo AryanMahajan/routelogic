@@ -7,6 +7,7 @@ import {
   ReactFlowProvider,
   applyEdgeChanges,
   applyNodeChanges,
+  useNodesInitialized,
   useReactFlow,
   type Connection,
   type Edge,
@@ -33,6 +34,7 @@ import { api } from "../../api";
 import { ContextMenu, type ContextMenuItem } from "../ContextMenu";
 import type { Pick } from "./EndpointPicker";
 import { ConditionNode, DisplayNode, RequestNode, VariablesNode, type RfNode } from "./nodes";
+import { WrapEdge } from "./WrapEdge";
 
 /** The MIME type an endpoint dragged out of the API panel carries. */
 export const ENDPOINT_DRAG_TYPE = "application/x-routelogic-endpoint";
@@ -43,6 +45,8 @@ const nodeTypes = {
   variables: VariablesNode,
   display: DisplayNode,
 };
+
+const edgeTypes = { wrap: WrapEdge };
 
 export type FlowUpdate = (flow: Flow) => Flow;
 
@@ -166,9 +170,15 @@ function Canvas({
   }, [flow, live, labels, scan, selected]);
 
   useEffect(() => {
+    const at = new Map(flow.nodes.map((n) => [n.id, n.position]));
     setEdges((previous) => {
       const old = new Map(previous.map((e) => [e.id, e]));
       return flow.edges.map((edge): Edge => {
+        // An edge that runs back to the left, as a wrapped chain's does, is drawn as
+        // right-angled steps round the cards rather than a curve straight across them.
+        const from = at.get(edge.from);
+        const to = at.get(edge.to);
+        const back = !!from && !!to && to.x < from.x + 120;
         const id = edgeId(edge);
         const state = edgeState(edge, live);
         const targetRunning = live[edge.to]?.status === "running";
@@ -179,26 +189,34 @@ function Canvas({
           sourceHandle: edge.handle ?? undefined,
           label: edge.handle ?? undefined,
           className: `rl-edge rl-edge-${state}`,
+          ...(back ? { type: "wrap" } : {}),
           animated: targetRunning,
           selected: old.get(id)?.selected ?? false,
         };
       });
     });
-  }, [flow.edges, live]);
+  }, [flow.edges, flow.nodes, live]);
 
-  // Keep everything in view as the flow grows: the first card, and every card added after
-  // it — a step added beside the selected one would otherwise land behind the inspector.
+  // Keep everything in view as the flow grows: when it opens, and for every card added
+  // after that, since a step added beside the selected one would otherwise land behind the
+  // inspector. The fit waits until React Flow has measured the cards: before that it knows
+  // no sizes, and a fit does nothing.
   const seen = useRef(0);
+  const wantFit = useRef(false);
+  const measured = useNodesInitialized();
   useEffect(() => {
-    const grew = flow.nodes.length > seen.current;
+    if (flow.nodes.length > seen.current) wantFit.current = true;
     seen.current = flow.nodes.length;
-    if (!grew) return;
-    const id = window.setTimeout(
-      () => void fitView({ padding: 0.2, maxZoom: 1, duration: 200 }),
-      20,
-    );
+  }, [flow.nodes.length]);
+  useEffect(() => {
+    if (!wantFit.current || !measured || nodes.length === 0) return;
+    // Cleared only once it fires: a re-render inside the delay schedules it again.
+    const id = window.setTimeout(() => {
+      wantFit.current = false;
+      void fitView({ padding: 0.15, maxZoom: 1, duration: 200 });
+    }, 20);
     return () => window.clearTimeout(id);
-  }, [flow.nodes.length, fitView]);
+  }, [measured, nodes, fitView]);
 
   // Selection is reported from here — the changes React Flow emits for clicks and box
   // selection — and never from `onSelectionChange`, which also fires when the nodes are
@@ -427,6 +445,7 @@ function Canvas({
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}

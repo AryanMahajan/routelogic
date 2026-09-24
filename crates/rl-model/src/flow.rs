@@ -520,15 +520,29 @@ impl Flow {
 
     /// Give every node without a [`Position`] one, and return how many were placed.
     ///
-    /// Columns follow dependency depth — the longest chain of edges leading into a node —
-    /// and rows follow document order within a column, so a chain reads left to right and
-    /// a fan-out stacks. Nodes that already have a position are never moved: a flow laid out
-    /// by hand stays as it was, and anything new is placed below it. A graph with a cycle
+    /// Columns follow dependency depth, the longest chain of edges leading into a node, so a
+    /// chain reads left to right and a fan-out stacks. A chain longer than four columns
+    /// wraps onto a new band below, like text, so a twelve-step flow fits a screen instead
+    /// of running off it. Within a column a node takes the row of what feeds it where it
+    /// can, which keeps a chain on one line and puts a branch beside its condition.
+    ///
+    /// Separate chains (connected components) are laid out one below the other rather than
+    /// interleaved. Nodes that already have a position are never moved: a flow laid out by
+    /// hand stays as it was, and anything new is placed below it. A graph with a cycle
     /// cannot be layered, and is laid out as one column in document order instead.
     pub fn lay_out(&mut self) -> usize {
-        const COLUMN: f64 = 340.0;
+        /// Card width (260) plus room for the edge between.
+        const COLUMN: f64 = 360.0;
+        /// The tallest usual card plus a gap.
         const ROW: f64 = 190.0;
+        /// Extra room between bands, for the edge that wraps back to the left.
+        const BAND_GAP: f64 = 70.0;
+        /// Extra room between separate chains, beyond a band's own gap.
+        const CHAIN_GAP: f64 = 40.0;
+        /// Between a hand-laid flow and what is added below it.
         const GAP: f64 = 260.0;
+        /// Columns before a chain wraps.
+        const WRAP: usize = 4;
 
         let unplaced: Vec<usize> = (0..self.nodes.len())
             .filter(|&i| self.nodes[i].position.is_none())
@@ -538,16 +552,93 @@ impl Flow {
         }
 
         let depth = self.depths();
+        let index: BTreeMap<&NodeId, usize> = self
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (&n.id, i))
+            .collect();
+        let is_unplaced: BTreeSet<usize> = unplaced.iter().copied().collect();
+        // Edges among the nodes being placed, as index pairs.
+        let links: Vec<(usize, usize)> = self
+            .edges
+            .iter()
+            .filter_map(|e| Some((*index.get(&e.from)?, *index.get(&e.to)?)))
+            .filter(|(a, b)| is_unplaced.contains(a) && is_unplaced.contains(b))
+            .collect();
 
-        // Rows are counted among the nodes being placed, so new cards do not leave gaps
-        // for placed ones that sit elsewhere.
-        let mut rows: BTreeMap<usize, usize> = BTreeMap::new();
-        let mut layered = Vec::with_capacity(unplaced.len());
+        // Connected components, in document order of their first node.
+        let mut component: BTreeMap<usize, usize> = unplaced.iter().map(|&i| (i, i)).collect();
+        fn root(component: &mut BTreeMap<usize, usize>, i: usize) -> usize {
+            let parent = component[&i];
+            if parent == i {
+                return i;
+            }
+            let top = root(component, parent);
+            component.insert(i, top);
+            top
+        }
+        for &(a, b) in &links {
+            let (ra, rb) = (root(&mut component, a), root(&mut component, b));
+            if ra != rb {
+                component.insert(ra.max(rb), ra.min(rb));
+            }
+        }
+        let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
         for &i in &unplaced {
-            let column = depth[i];
-            let row = rows.entry(column).or_insert(0);
-            layered.push((i, column as f64 * COLUMN, *row as f64 * ROW));
-            *row += 1;
+            let r = root(&mut component, i);
+            groups.entry(r).or_default().push(i);
+        }
+
+        let mut layered: Vec<(usize, f64, f64)> = Vec::with_capacity(unplaced.len());
+        let mut top = 0.0;
+        for members in groups.values() {
+            let shallowest = members.iter().map(|&i| depth[i]).min().unwrap_or(0);
+            let local = |i: usize| depth[i] - shallowest;
+            let bands = members.iter().map(|&i| local(i) / WRAP).max().unwrap_or(0);
+
+            let mut row_of: BTreeMap<usize, usize> = BTreeMap::new();
+            for band in 0..=bands {
+                let mut band_rows = 0;
+                for column in 0..WRAP {
+                    let mut here: Vec<(f64, usize)> = members
+                        .iter()
+                        .filter(|&&i| local(i) == band * WRAP + column)
+                        .map(|&i| {
+                            // The mean row of what feeds it from this band; a node fed from
+                            // the band above, or by nothing, goes where there is room.
+                            let fed: Vec<usize> = links
+                                .iter()
+                                .filter(|(_, to)| *to == i)
+                                .filter(|(from, _)| local(*from) / WRAP == band)
+                                .filter_map(|(from, _)| row_of.get(from).copied())
+                                .collect();
+                            let centre = if fed.is_empty() {
+                                f64::INFINITY
+                            } else {
+                                fed.iter().sum::<usize>() as f64 / fed.len() as f64
+                            };
+                            (centre, i)
+                        })
+                        .collect();
+                    here.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                    let mut next = 0;
+                    for (centre, i) in here {
+                        let row = if centre.is_finite() {
+                            next.max(centre.round() as usize)
+                        } else {
+                            next
+                        };
+                        row_of.insert(i, row);
+                        next = row + 1;
+                        let y = top + row as f64 * ROW;
+                        layered.push((i, column as f64 * COLUMN, y));
+                    }
+                    band_rows = band_rows.max(next);
+                }
+                top += band_rows as f64 * ROW + BAND_GAP;
+            }
+            top += CHAIN_GAP;
         }
 
         // Beside nothing, the layout starts at the origin; beside a flow already laid out,
@@ -803,6 +894,57 @@ mod tests {
             "what depends on them sits to the right"
         );
         assert_eq!(flow.lay_out(), 0, "nothing left to place");
+    }
+
+    #[test]
+    fn a_long_chain_wraps_onto_bands_below_instead_of_running_off_the_screen() {
+        let mut flow = Flow::new("long");
+        let ids: Vec<NodeId> = (0..10).map(|i| flow.add(get(&format!("/{i}")))).collect();
+        for pair in ids.windows(2) {
+            flow.connect(&pair[0], &pair[1]);
+        }
+        flow.lay_out();
+        let at = |i: usize| flow.node(&ids[i]).unwrap().position.unwrap();
+
+        let columns: BTreeSet<i64> = (0..10).map(|i| at(i).x as i64).collect();
+        assert_eq!(columns.len(), 4, "four columns, then it wraps");
+        assert_eq!(at(0).y, at(3).y, "the first four share a line");
+        assert_eq!(
+            at(4).x,
+            at(0).x,
+            "the fifth starts the next band at the left"
+        );
+        assert!(
+            at(4).y > at(3).y && at(8).y > at(4).y,
+            "each band below the last"
+        );
+    }
+
+    #[test]
+    fn separate_chains_stack_rather_than_interleave_and_a_branch_sits_by_its_condition() {
+        let mut flow = Flow::new("two");
+        let a1 = flow.add(get("/a1"));
+        let b1 = flow.add(get("/b1"));
+        let a2 = flow.add(get("/a2"));
+        let b2 = flow.add(get("/b2"));
+        let only = flow.add(get("/only"));
+        let yes = flow.add(Node::display("yes"));
+        flow.connect(&a1, &a2);
+        flow.connect(&b1, &b2);
+        flow.connect(&b2, &yes);
+        flow.lay_out();
+        let at = |id: &NodeId| flow.node(id).unwrap().position.unwrap();
+
+        assert_eq!(at(&a1).y, at(&a2).y, "a chain stays on its line");
+        assert_eq!(at(&b1).y, at(&b2).y);
+        assert_eq!(
+            at(&b2).y,
+            at(&yes).y,
+            "a single child sits beside its parent"
+        );
+        assert!(at(&b1).y > at(&a1).y, "the second chain is below the first");
+        assert!(at(&only).y > at(&b1).y, "and a lone step below both");
+        assert_eq!(at(&only).x, 0.0);
     }
 
     #[test]
