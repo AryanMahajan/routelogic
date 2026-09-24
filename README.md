@@ -110,7 +110,7 @@ project have?"* to *"I can see it, understand it, and test it."*
 - **Agents over MCP**: Claude Code, Cursor and others can read the discovered API, try
   requests and write and run flows for you — loopback-only by default, secrets masked.
 
-Verified by 570+ tests, including fixture projects per framework whose snapshots record
+Verified by 580+ tests, including fixture projects per framework whose snapshots record
 **expected misses** as well as hits, runs against the `expressjs/express` repository,
 chi's examples, Echo's cookbook and Fiber's recipes, and an end-to-end runtime-enrich pass
 over a real Flask application.

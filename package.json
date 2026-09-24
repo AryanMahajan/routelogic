@@ -1,7 +1,7 @@
 {
   "name": "routelogic",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local-first API client that discovers HTTP endpoints from your source code (FastAPI, Flask, Django, Express, Next.js) and lets you test them — a codebase-aware Postman alternative built in Rust and Tauri.",
   "keywords": [
     "api-client",
