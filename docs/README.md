@@ -39,7 +39,7 @@ Live phase tracking, including what slipped and why, lives in `docs/internal/roa
 4. [Flows](flows.md) — multi-step API tests on a canvas; the
    [walkthrough](flows-walkthrough.md) builds one against the FastAPI fixture and traces the
    run, and [examples/](examples/) has it as a file
-5. [Agents](agents.md) — connect Claude Code, Cursor or another MCP client and have it
+5. [Agents](agents.md) — connect Claude Code, OpenClaw, Antigravity, Cursor or another MCP client and have it
    write flows from a description
 6. [Workspace format](workspace/format.md) — what lands on disk
 7. [Environments](workspace/environments.md) and [secrets](workspace/secrets.md)

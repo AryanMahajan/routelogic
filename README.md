@@ -107,7 +107,7 @@ project have?"* to *"I can see it, understand it, and test it."*
   extract `{{auth_token}}` from one response into the next request, assert on status,
   headers and body, run the whole thing and read the failure path off the graph — then jump
   from the failing card to the handler in your editor. Saved with the project.
-- **Agents over MCP**: Claude Code, Cursor and others can read the discovered API, try
+- **Agents over MCP**: Claude Code, OpenClaw, Antigravity, Cursor and others can read the discovered API, try
   requests and write and run flows for you — loopback-only by default, secrets masked.
 
 Verified by 580+ tests, including fixture projects per framework whose snapshots record
@@ -164,8 +164,8 @@ that flow as a file.
 
 ## Agents: describe a test, get a flow
 
-Connect Claude Code, Cursor or any other MCP client — **Agent…** in the sidebar shows the
-exact command for your machine — and ask in words:
+Connect Claude Code, OpenClaw, Antigravity, Cursor or any other MCP client — **Agent…** in
+the sidebar shows the exact command for your machine — and ask in words:
 
 > Write a flow that logs in, creates a user, fetches it, deletes it and checks it's gone.
 
@@ -181,7 +181,31 @@ ordinary file you can edit and commit.
   flow should use one.
 - Everything it sends is in History, marked `agent`.
 
-See [docs/agents.md](docs/agents.md).
+### Connect your agent
+
+Open the project, click **Agent…** at the bottom of the sidebar, and copy the line for your
+client. The paths are already filled in. In each line below, `<app>` is the RouteLogic
+executable (`routelogic.exe` on Windows) and `<project>` is the project's folder.
+
+| Client | How |
+|---|---|
+| **Claude Code** | `claude mcp add routelogic -- "<app>" mcp --workspace "<project>"`, then check with `/mcp` |
+| **OpenClaw** | `openclaw mcp add routelogic --command "<app>" --arg mcp --arg=--workspace --arg "<project>"`, then `openclaw mcp probe routelogic`. Run it where the gateway runs |
+| **Antigravity (`agy`)** | Add the JSON below to `~/.gemini/config/mcp_config.json` and restart `agy` |
+| **Cursor** | The JSON below in `.cursor/mcp.json` |
+| **Claude Desktop, Gemini CLI, Windsurf, Codex, …** | The same command and arguments in the client's MCP config ([where each one keeps it](docs/agents.md#cursor-claude-desktop-gemini-cli-windsurf-and-others)) |
+
+```json
+{
+  "mcpServers": {
+    "routelogic": { "command": "<app>", "args": ["mcp", "--workspace", "<project>"] }
+  }
+}
+```
+
+Every client starts the same thing: the app, with `mcp --workspace <project>`, over stdio.
+Setup for each client, the nine tools, the allow list and troubleshooting are in
+**[docs/agents.md](docs/agents.md)**.
 
 ## Framework support
 
@@ -308,7 +332,8 @@ yes. It is not trying to replace team collaboration features, mock servers or mo
 and Go with net/http, Gin, Echo, chi, Fiber or gorilla/mux. See
 [framework support](docs/discovery/frameworks.md).
 
-**Can an AI agent use it?** Yes — over MCP, with the app itself as the server. It can
+**Can an AI agent use it?** Yes — over MCP, with the app itself as the server, from
+Claude Code, OpenClaw, Antigravity, Cursor or any MCP client. It can
 reach loopback hosts and whatever you allow, never sees secret values, and everything it
 sends is in history. See [agents](docs/agents.md).
 

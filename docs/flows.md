@@ -173,7 +173,7 @@ substituted moments before sending, as everywhere else in RouteLogic.
 
 ## Written by an agent
 
-An agent connected over MCP — Claude Code, Cursor, anything that speaks it — can write
+An agent connected over MCP — Claude Code, OpenClaw, Antigravity, Cursor, anything that speaks it — can write
 flows too: it reads the discovered API, tries each request, then saves and runs the flow,
 which appears on the canvas as it is written. Its node ids may be words and it may leave
 out positions; RouteLogic lays the cards out. See [agents](agents.md), and

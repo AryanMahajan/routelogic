@@ -3,10 +3,10 @@ import { createPortal } from "react-dom";
 import { api, CoreError, onWorkspaceChanged } from "../api";
 import type { AgentConnection } from "../types";
 
-type Client = "claude" | "json";
+type Client = "claude" | "openclaw" | "json";
 
 /**
- * How to connect an AI agent — Claude Code, Cursor, anything that speaks MCP — to this
+ * How to connect an AI agent — Claude Code, OpenClaw, Cursor, Antigravity, anything that speaks MCP — to this
  * workspace, and where it may send requests.
  *
  * The server is this same program run as `routelogic mcp`, so the command shown is built from
@@ -44,7 +44,13 @@ export function AgentDialog({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const text = connection ? (client === "claude" ? connection.claude_code : connection.json) : "";
+  const text = connection
+    ? client === "claude"
+      ? connection.claude_code
+      : client === "openclaw"
+        ? connection.openclaw
+        : connection.json
+    : "";
 
   async function copy() {
     try {
@@ -91,17 +97,26 @@ export function AgentDialog({ onClose }: { onClose: () => void }) {
                   <Tab active={client === "claude"} onClick={() => setClient("claude")}>
                     Claude Code
                   </Tab>
+                  <Tab active={client === "openclaw"} onClick={() => setClient("openclaw")}>
+                    OpenClaw
+                  </Tab>
                   <Tab active={client === "json"} onClick={() => setClient("json")}>
-                    Cursor, Claude Desktop, others
+                    Cursor, Antigravity, others
                   </Tab>
                 </div>
                 <p className="text-[12px] text-muted">
                   {client === "claude" ? (
                     <>Run this in a terminal, in the project's folder:</>
+                  ) : client === "openclaw" ? (
+                    <>
+                      Run this on the machine the OpenClaw gateway runs on, then check it with{" "}
+                      <code className="text-ink">openclaw mcp probe routelogic</code>:
+                    </>
                   ) : (
                     <>
                       Add this to the client's MCP settings — for Cursor, <code className="text-ink">.cursor/mcp.json</code>{" "}
-                      in the project:
+                      in the project; for Antigravity (<code className="text-ink">agy</code>),{" "}
+                      <code className="text-ink">~/.gemini/config/mcp_config.json</code>:
                     </>
                   )}
                 </p>

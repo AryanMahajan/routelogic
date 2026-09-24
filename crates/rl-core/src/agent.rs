@@ -635,8 +635,10 @@ pub struct AgentConnection {
     pub args: Vec<String>,
     /// One line for Claude Code.
     pub claude_code: String,
-    /// The `mcpServers` entry that Cursor, Claude Desktop, Windsurf and most other clients
-    /// read from a JSON file.
+    /// One line for OpenClaw, which saves the server in its own config.
+    pub openclaw: String,
+    /// The `mcpServers` entry that Cursor, Antigravity, Claude Desktop, Windsurf and most
+    /// other clients read from a JSON file.
     pub json: String,
     /// Where the allow list lives.
     pub manifest: PathBuf,
@@ -663,6 +665,12 @@ impl RouteLogic {
             quote(&executable.display().to_string()),
             quote(&root.display().to_string()),
         );
+        // `--arg=` keeps `--workspace` from reading as one of OpenClaw's own flags.
+        let openclaw = format!(
+            "openclaw mcp add {SERVER_NAME} --command {} --arg mcp --arg=--workspace --arg {}",
+            quote(&executable.display().to_string()),
+            quote(&root.display().to_string()),
+        );
         let json = serde_json::to_string_pretty(&serde_json::json!({
             "mcpServers": {
                 SERVER_NAME: { "command": executable, "args": args }
@@ -676,6 +684,7 @@ impl RouteLogic {
             command: executable.to_path_buf(),
             args,
             claude_code,
+            openclaw,
             json,
             manifest: workspace.layout().manifest(),
             policy: self.agent_policy()?.view(),

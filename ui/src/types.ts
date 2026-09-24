@@ -202,7 +202,9 @@ export interface AgentConnection {
   args: string[];
   /** One line for Claude Code. */
   claude_code: string;
-  /** The `mcpServers` entry most other clients read from a JSON file. */
+  /** One line for OpenClaw. */
+  openclaw: string;
+  /** The `mcpServers` entry most other clients read from a JSON file — Cursor, Antigravity, Claude Desktop. */
   json: string;
   /** `workspace.yaml`, where the allow list lives. */
   manifest: string;

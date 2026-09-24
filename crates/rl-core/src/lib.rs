@@ -1791,6 +1791,13 @@ mod tests {
             "{}",
             connection.claude_code
         );
+        assert!(
+            connection.openclaw.starts_with(
+                r#"openclaw mcp add routelogic --command "C:\Program Files\RouteLogic\routelogic.exe" --arg mcp --arg=--workspace --arg "#
+            ),
+            "{}",
+            connection.openclaw
+        );
         let json: serde_json::Value = serde_json::from_str(&connection.json).unwrap();
         assert_eq!(
             json["mcpServers"]["routelogic"]["args"][2].as_str(),

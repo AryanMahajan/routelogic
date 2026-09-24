@@ -1,4 +1,4 @@
-# Agents: let Claude Code, Cursor and others write flows
+# Agents: let Claude Code, OpenClaw, Antigravity, Cursor and others write flows
 
 RouteLogic can serve an AI agent over the [Model Context Protocol](https://modelcontextprotocol.io).
 Connect one and describe a test in words, for example "log in, create a user, fetch it,
@@ -28,9 +28,49 @@ claude mcp add routelogic -- "<path to RouteLogic>" mcp --workspace "<project fo
 
 Then start `claude` there and ask for a flow. `/mcp` shows whether the server is connected.
 
-### Cursor, Claude Desktop, Windsurf and others
+### OpenClaw
 
-Most clients read an `mcpServers` block from a JSON file. The dialog's second tab has the
+OpenClaw saves MCP servers in its own config, and its gateway starts them. The dialog's
+**OpenClaw** tab gives you the line:
+
+```bash
+openclaw mcp add routelogic --command "<path to RouteLogic>" --arg mcp --arg=--workspace --arg "<project folder>"
+```
+
+Check that it starts and lists RouteLogic's tools:
+
+```bash
+openclaw mcp probe routelogic
+```
+
+Then ask your OpenClaw agent for a flow, the same way as any other client.
+
+Run the `add` on the machine where the gateway runs. The gateway starts RouteLogic as a
+child process, so both paths must exist on that machine. If the gateway is on a server or
+VPS, RouteLogic and the project have to be there too, and "loopback" means that machine's
+localhost. If the probe fails, `openclaw mcp doctor routelogic --probe` says why. To
+remove the server, run `openclaw mcp unset routelogic`.
+
+### Antigravity (`agy`)
+
+The Antigravity CLI and IDE read the standard `mcpServers` JSON (below) from
+`~/.gemini/config/mcp_config.json`. Add the `routelogic` entry there, merging it with any
+servers already listed, and restart `agy`.
+
+Antigravity also reads a per-project `.agents/mcp_config.json`. Some CLI versions log that
+file and then ignore its servers ([antigravity-cli#60](https://github.com/google-antigravity/antigravity-cli/issues/60)),
+so use the file in your home folder, which always works.
+
+That file applies to every project. Because the workspace path is part of the entry, give
+each project its own name, for example `routelogic-shop` and `routelogic-billing`, each
+with its own `--workspace`.
+
+To remove it, delete the entry. Antigravity also keeps a copy in
+`~/.gemini/antigravity-cli/mcp/routelogic/`, so delete that folder too.
+
+### Cursor, Claude Desktop, Gemini CLI, Windsurf and others
+
+Most clients read an `mcpServers` block from a JSON file. The dialog's third tab has the
 block for this project:
 
 ```json
@@ -44,11 +84,21 @@ block for this project:
 }
 ```
 
+On Windows, write each `\` in the paths as `\\` inside JSON. The dialog already does this.
+
 | Client | Where it goes |
 |---|---|
 | Cursor | `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json` for every project |
+| Antigravity (`agy`) | `~/.gemini/config/mcp_config.json`, see above |
 | Claude Desktop | `claude_desktop_config.json`: `%APPDATA%\Claude\` on Windows, `~/Library/Application Support/Claude/` on macOS |
+| Gemini CLI | `.gemini/settings.json` in the project, or `~/.gemini/settings.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| Codex CLI | `~/.codex/config.toml`, as TOML: `[mcp_servers.routelogic]` with `command = "<path>"` and `args = ["mcp", "--workspace", "<project folder>"]` |
 | Anything else | The client's MCP settings. The command and arguments are all it needs |
+
+Clients change where they keep this file from version to version. If one of these doesn't
+work, check the client's own MCP docs. Whatever the client, the entry is the same: start
+the RouteLogic program with the arguments `mcp --workspace <project folder>`, over stdio.
 
 ### Where the path points
 
@@ -169,5 +219,11 @@ the same shape, written by hand.
 - **"not in the agent allow list".** The request resolved to a host that isn't loopback. Check
   which environment is active; the agent uses it unless it asks for another. Add the host
   under `agent.allow` if you mean it to go there.
+- **The client doesn't list RouteLogic's tools.** Most clients read their MCP config only at
+  startup, so restart the client (`agy`, Cursor, Claude Desktop) after editing it. In Claude
+  Code, `/mcp` shows the server's state. In OpenClaw, run `openclaw mcp probe routelogic`.
+- **It works in one project but not another.** The `--workspace` path is fixed in the
+  entry. Add an entry for each project, each with its own name, or use a per-project config
+  file where the client supports one.
 - **Flows appear but the canvas doesn't update.** The app watches the workspace it has open.
   Check that the `--workspace` path is the same folder.
