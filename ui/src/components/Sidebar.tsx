@@ -23,6 +23,7 @@ export function Sidebar({
   onChanged,
   onImport,
   onShortcuts,
+  onAgent,
   onWorkspaceChange,
   onManageEnvironments,
   refreshKey,
@@ -46,6 +47,8 @@ export function Sidebar({
   onImport: () => void;
   /** Show the keyboard shortcuts sheet. */
   onShortcuts: () => void;
+  /** Show how to connect an AI agent over MCP. */
+  onAgent: () => void;
   onWorkspaceChange: (info: WorkspaceInfo) => void;
   onManageEnvironments: () => void;
   refreshKey: number;
@@ -378,6 +381,14 @@ export function Sidebar({
           className="flex-1 rounded bg-raised px-3 py-1.5 transition hover:brightness-125 disabled:opacity-40"
         >
           Import…
+        </button>
+        <button
+          onClick={onAgent}
+          disabled={!workspace}
+          title="Let an AI agent such as Claude Code read this API and write flows"
+          className="flex-1 rounded bg-raised px-3 py-1.5 transition hover:brightness-125 disabled:opacity-40"
+        >
+          Agent…
         </button>
         <button
           onClick={onShortcuts}

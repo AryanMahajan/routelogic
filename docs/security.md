@@ -41,9 +41,31 @@ your own code, a decision worth making consciously for someone else's.
 
 ## What RouteLogic sends
 
-Only requests you trigger. There is no telemetry, no analytics, no update ping, no account,
-and no cloud component. The application is fully functional with no network access beyond the
-requests you make.
+Only requests you trigger — or an agent you connected does. There is no telemetry, no
+analytics, no update ping, no account, and no cloud component. The application is fully
+functional with no network access beyond the requests you make.
+
+## Agents
+
+An [agent connected over MCP](agents.md) runs RouteLogic as its own process, started by the
+agent's client — nothing listens on a port. What it can do is bounded in `rl-core`, not in
+the agent's good behaviour:
+
+- **Where it may send.** Loopback hosts, with any method. Any other host only if
+  `agent.allow` in `.routelogic/workspace.yaml` lists it, optionally for some methods. The
+  check is on the resolved host, not the environment's name, and repeats before every
+  redirect. The file is read on every request, so revoking takes effect immediately.
+- **What it sees.** Every secret value is replaced with `{{secret:NAME}}` before anything
+  is returned: request echoes, response bodies and headers, captured values, errors.
+- **What it writes.** Flows in `.routelogic/flows/`, and nothing else. It cannot edit
+  environments, secrets, the allow list or the project's source through RouteLogic.
+- **What is recorded.** Every request it sends, and every one it was refused, lands in
+  history marked `agent`, redacted like any other.
+
+The agent is only as trustworthy as its client and model, and it sees your API's real
+responses — personal data in a local database included. Loopback is allowed by default
+because that is the server you are developing; if yours talks to production data, run it
+against a copy.
 
 ## Certificate verification
 

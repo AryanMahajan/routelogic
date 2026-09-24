@@ -171,6 +171,14 @@ edges:
 Secret values never appear: a request references `{{secret:name}}` and the value is
 substituted moments before sending, as everywhere else in RouteLogic.
 
+## Written by an agent
+
+An agent connected over MCP — Claude Code, Cursor, anything that speaks it — can write
+flows too: it reads the discovered API, tries each request, then saves and runs the flow,
+which appears on the canvas as it is written. Its node ids may be words and it may leave
+out positions; RouteLogic lays the cards out. See [agents](agents.md), and
+[`flow.schema.json`](flow.schema.json) for the format.
+
 ## A worked example
 
 [flows-walkthrough.md](flows-walkthrough.md) builds the flow below in the UI click by

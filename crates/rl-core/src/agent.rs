@@ -36,6 +36,7 @@ use rl_workspace::{AgentAllow, AgentConfig};
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::net::IpAddr;
+use std::path::{Path, PathBuf};
 use url::{Host, Url};
 
 /// History rows for requests an agent sent carry this as their source.
@@ -624,6 +625,78 @@ impl RouteLogic {
     }
 }
 
+/// How to connect an agent to the open workspace, for the app to show and copy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentConnection {
+    /// The server's name as the agent's client lists it.
+    pub server_name: String,
+    /// The program the client starts: this app's own executable.
+    pub command: PathBuf,
+    pub args: Vec<String>,
+    /// One line for Claude Code.
+    pub claude_code: String,
+    /// The `mcpServers` entry that Cursor, Claude Desktop, Windsurf and most other clients
+    /// read from a JSON file.
+    pub json: String,
+    /// Where the allow list lives.
+    pub manifest: PathBuf,
+    pub policy: PolicyView,
+}
+
+/// The name agents' clients list the server under.
+pub const SERVER_NAME: &str = "routelogic";
+
+impl RouteLogic {
+    /// How an agent's client should start the MCP server for the open workspace, given the
+    /// path of the executable that serves it — the app's own, which the shell knows and
+    /// the core does not.
+    pub fn agent_connection(&self, executable: &Path) -> Result<AgentConnection> {
+        let workspace = self.workspace()?;
+        let root = workspace.layout().root().to_path_buf();
+        let args = vec![
+            "mcp".to_string(),
+            "--workspace".to_string(),
+            root.display().to_string(),
+        ];
+        let claude_code = format!(
+            "claude mcp add {SERVER_NAME} -- {} mcp --workspace {}",
+            quote(&executable.display().to_string()),
+            quote(&root.display().to_string()),
+        );
+        let json = serde_json::to_string_pretty(&serde_json::json!({
+            "mcpServers": {
+                SERVER_NAME: { "command": executable, "args": args }
+            }
+        }))
+        .map_err(|e| CoreError::Internal {
+            message: e.to_string(),
+        })?;
+        Ok(AgentConnection {
+            server_name: SERVER_NAME.into(),
+            command: executable.to_path_buf(),
+            args,
+            claude_code,
+            json,
+            manifest: workspace.layout().manifest(),
+            policy: self.agent_policy()?.view(),
+        })
+    }
+}
+
+/// Quoted for a shell when it has to be. Double quotes read the same in PowerShell, cmd,
+/// bash and zsh for a path — no `$`, backtick or `"` in it is the one assumption.
+fn quote(text: &str) -> String {
+    if !text.is_empty()
+        && text
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || r"/\:._-".contains(c))
+    {
+        text.to_string()
+    } else {
+        format!("\"{text}\"")
+    }
+}
+
 /// Resolve against a given set of variables, reporting every undefined one together.
 fn resolve_in(draft: &RequestDraft, variables: &VariableContext) -> Result<RequestDraft> {
     let undefined: Vec<String> = draft
@@ -659,6 +732,16 @@ mod tests {
                 })
                 .collect(),
         })
+    }
+
+    #[test]
+    fn a_path_is_quoted_only_when_a_shell_would_split_it() {
+        assert_eq!(quote("/usr/bin/routelogic"), "/usr/bin/routelogic");
+        assert_eq!(quote(r"C:\Apps\routelogic.exe"), r"C:\Apps\routelogic.exe");
+        assert_eq!(
+            quote(r"C:\Program Files\RouteLogic\routelogic.exe"),
+            r#""C:\Program Files\RouteLogic\routelogic.exe""#
+        );
     }
 
     #[test]

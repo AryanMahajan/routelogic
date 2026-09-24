@@ -24,6 +24,7 @@ Implementation is phased so each phase leaves a usable application.
 | P5 | Runtime enrich, Flask adapter | Done |
 | P6 | Collections & environments UI, Django + DRF | Done (capture rules deferred) |
 | — | Go: net/http, Gin, Echo, chi, Fiber, gorilla/mux | Done |
+| — | Agents over MCP: an agent reads the API, tries requests, writes and runs flows | Done |
 
 Live phase tracking, including what slipped and why, lives in `docs/internal/roadmap.md`
 (not committed).
@@ -38,8 +39,10 @@ Live phase tracking, including what slipped and why, lives in `docs/internal/roa
 4. [Flows](flows.md) — multi-step API tests on a canvas; the
    [walkthrough](flows-walkthrough.md) builds one against the FastAPI fixture and traces the
    run, and [examples/](examples/) has it as a file
-5. [Workspace format](workspace/format.md) — what lands on disk
-6. [Environments](workspace/environments.md) and [secrets](workspace/secrets.md)
+5. [Agents](agents.md) — connect Claude Code, Cursor or another MCP client and have it
+   write flows from a description
+6. [Workspace format](workspace/format.md) — what lands on disk
+7. [Environments](workspace/environments.md) and [secrets](workspace/secrets.md)
 
 **If you want to understand or contribute to it**
 

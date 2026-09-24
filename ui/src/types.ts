@@ -195,6 +195,26 @@ export interface Exchange {
 }
 
 /** A document another process changed on disk — an agent, git, an editor. */
+/** How an agent's client starts RouteLogic's MCP server for the open workspace. */
+export interface AgentConnection {
+  server_name: string;
+  command: string;
+  args: string[];
+  /** One line for Claude Code. */
+  claude_code: string;
+  /** The `mcpServers` entry most other clients read from a JSON file. */
+  json: string;
+  /** `workspace.yaml`, where the allow list lives. */
+  manifest: string;
+  policy: {
+    /** Always allowed, with every method. */
+    loopback: string[];
+    /** `methods` empty means every method. */
+    allow: { host: string; methods: string[] }[];
+    how_to_change: string;
+  };
+}
+
 export interface WorkspaceChange {
   kind: "flow" | "collection" | "environment" | "workspace";
   /** The document's name; empty for the workspace manifest. */

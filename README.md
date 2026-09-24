@@ -12,7 +12,7 @@ discovery instead of hand-configured collections.**
 
 > **Pre-alpha.** Unsigned installers for every platform are on the
 > [Releases](https://github.com/AryanMahajan/routelogic/releases) page, or run it from source.
-> [Install](#install) · [Run it from source](#run-it-from-source) · [What works](#what-works-today) · [Flows](#flows-multi-step-api-tests-on-a-canvas) · [Docs](docs/)
+> [Install](#install) · [Run it from source](#run-it-from-source) · [What works](#what-works-today) · [Flows](#flows-multi-step-api-tests-on-a-canvas) · [Agents](#agents-describe-a-test-get-a-flow) · [Docs](docs/)
 
 ---
 
@@ -107,6 +107,8 @@ project have?"* to *"I can see it, understand it, and test it."*
   extract `{{auth_token}}` from one response into the next request, assert on status,
   headers and body, run the whole thing and read the failure path off the graph — then jump
   from the failing card to the handler in your editor. Saved with the project.
+- **Agents over MCP**: Claude Code, Cursor and others can read the discovered API, try
+  requests and write and run flows for you — loopback-only by default, secrets masked.
 
 Verified by 570+ tests, including fixture projects per framework whose snapshots record
 **expected misses** as well as hits, runs against the `expressjs/express` repository,
@@ -159,6 +161,27 @@ Read [docs/flows.md](docs/flows.md) for the reference,
 flow against the bundled FastAPI fixture and a trace of what the runner does with it, and
 [docs/examples/fastapi-user-lifecycle.yaml](docs/examples/fastapi-user-lifecycle.yaml) for
 that flow as a file.
+
+## Agents: describe a test, get a flow
+
+Connect Claude Code, Cursor or any other MCP client — **Agent…** in the sidebar shows the
+exact command for your machine — and ask in words:
+
+> Write a flow that logs in, creates a user, fetches it, deletes it and checks it's gone.
+
+The agent lists the endpoints RouteLogic discovered, sends each request to your running
+server to see what really comes back, writes the flow with the right captures and
+assertions, runs it, and fixes what fails. It appears on the canvas while you watch, as an
+ordinary file you can edit and commit.
+
+- The server is the app itself — `routelogic mcp` — so there is nothing else to install.
+- Requests go to **loopback only** unless you list more hosts in `workspace.yaml`, checked
+  on the resolved host and again at every redirect.
+- **Secret values never reach the agent**; it sees `{{secret:NAME}}`, which is also how a
+  flow should use one.
+- Everything it sends is in History, marked `agent`.
+
+See [docs/agents.md](docs/agents.md).
 
 ## Framework support
 
@@ -260,7 +283,7 @@ Start at **[docs/](docs/)**.
 - [Getting started](docs/getting-started.md) · [Concepts](docs/concepts.md) ·
   [Import](docs/import.md)
 - [Flows](docs/flows.md) · [Flows walkthrough](docs/flows-walkthrough.md) ·
-  [Example flow](docs/examples/fastapi-user-lifecycle.yaml)
+  [Example flow](docs/examples/fastapi-user-lifecycle.yaml) · [Agents](docs/agents.md)
 - [How discovery works](docs/discovery/how-it-works.md) ·
   [Framework support](docs/discovery/frameworks.md) ·
   [Adding a framework](docs/discovery/adding-a-framework.md)
@@ -284,6 +307,10 @@ yes. It is not trying to replace team collaboration features, mock servers or mo
 **Which frameworks are supported?** FastAPI, Flask, Django (with DRF), Express, Next.js,
 and Go with net/http, Gin, Echo, chi, Fiber or gorilla/mux. See
 [framework support](docs/discovery/frameworks.md).
+
+**Can an AI agent use it?** Yes — over MCP, with the app itself as the server. It can
+reach loopback hosts and whatever you allow, never sees secret values, and everything it
+sends is in history. See [agents](docs/agents.md).
 
 **Where are my secrets stored?** Outside the committed workspace, in a private local store.
 Environment files reference them by name only. See [security](docs/security.md).

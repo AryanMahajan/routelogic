@@ -19,6 +19,7 @@ import {
 } from "./flowTypes";
 import {
   normalizeRequest,
+  type AgentConnection,
   type Collection,
   type EnrichProposal,
   type SaveAllReport,
@@ -88,6 +89,7 @@ export const api = {
     call<WorkspaceInfo>("create_workspace", { path, name, standalone }),
   workspaceInfo: () => call<WorkspaceInfo>("workspace_info"),
   closeWorkspace: () => call<void>("close_workspace"),
+  agentConnection: () => call<AgentConnection>("agent_connection"),
 
   // --- environments ---
   setEnvironment: (name: string | null) => call<WorkspaceInfo>("set_environment", { name }),

@@ -38,8 +38,9 @@ routelogic/
 │   ├── rl-http/          # request execution engine
 │   ├── rl-flow/          # flow runner: dependency order, extraction, assertions
 │   ├── rl-workspace/     # workspace files, secrets, history, index cache
-│   └── rl-core/          # facade — the only surface the shell calls
-├── src-tauri/            # Tauri v2 shell
+│   ├── rl-core/          # facade — the only surface the shells call
+│   └── rl-mcp/           # MCP server: rl-core's API as tools for an agent
+├── src-tauri/            # Tauri v2 shell; `routelogic mcp` runs rl-mcp instead
 ├── ui/                   # React + TypeScript + Vite
 └── tests/fixtures/       # sample projects + expected-route snapshots
 ```
@@ -63,7 +64,7 @@ rl-model  ←──  rl-discovery
     │                │
     └──────  rl-core ┘
                 │
-           src-tauri
+           src-tauri  ──→  rl-mcp
                 │
                ui
 ```
@@ -96,7 +97,16 @@ handling, SQLite for history and the source index.
 
 **`rl-core`** — the facade. Owns application state, orchestrates the others, exposes one
 coherent API. `src-tauri` contains no logic beyond command wrappers, event emission, and
-filesystem scope handling.
+filesystem scope handling. What an agent may send and see — the allow list, secret
+masking — is decided here too (`agent.rs`), so the rules sit beside everything else and
+are tested without a client.
+
+**`rl-mcp`** — the second shell: [agents](agents.md) over the Model Context Protocol, on
+stdio. Each tool is a thin call into `rl-core`'s `*_for_agent` methods plus a JSON answer
+an agent can read. The desktop binary hands `routelogic mcp …` to it before any window
+exists, so one executable is both the app and the server; `routelogic-mcp` is the same
+server as a standalone binary for development. Its end-to-end test spawns that binary and
+builds and runs a flow over stdio the way an agent would.
 
 ## The HTTP engine is deliberately low-magic
 

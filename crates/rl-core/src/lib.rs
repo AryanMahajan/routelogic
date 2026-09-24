@@ -52,7 +52,7 @@ pub mod error;
 
 pub mod agent;
 
-pub use agent::{AgentPolicy, AgentResponse, AgentRun, AgentSend, Refusal};
+pub use agent::{AgentConnection, AgentPolicy, AgentResponse, AgentRun, AgentSend, Refusal};
 pub use error::{CoreError, Result};
 
 use rl_discovery::enrich::{self, AppTarget, Interpreter, Provenance};
@@ -1774,6 +1774,30 @@ mod tests {
         assert!(recorded
             .iter()
             .all(|e| e.source.as_deref() == Some("agent")));
+    }
+
+    #[test]
+    fn connecting_an_agent_names_this_executable_this_workspace_and_the_allow_list() {
+        let (dir, app) = app();
+        let exe = std::path::Path::new(r"C:\Program Files\RouteLogic\routelogic.exe");
+        let connection = app.agent_connection(exe).unwrap();
+        let root = dir.path().display().to_string();
+
+        assert_eq!(connection.args, vec!["mcp", "--workspace", root.as_str()]);
+        assert!(
+            connection.claude_code.starts_with(
+                r#"claude mcp add routelogic -- "C:\Program Files\RouteLogic\routelogic.exe" mcp --workspace "#
+            ),
+            "{}",
+            connection.claude_code
+        );
+        let json: serde_json::Value = serde_json::from_str(&connection.json).unwrap();
+        assert_eq!(
+            json["mcpServers"]["routelogic"]["args"][2].as_str(),
+            Some(root.as_str())
+        );
+        assert!(connection.manifest.ends_with("workspace.yaml"));
+        assert!(connection.policy.allow.is_empty());
     }
 
     #[tokio::test]

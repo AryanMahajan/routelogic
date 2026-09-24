@@ -30,6 +30,7 @@ import {
 } from "./types";
 import { VariablesContext } from "./variables";
 import { CommandPalette } from "./components/CommandPalette";
+import { AgentDialog } from "./components/AgentDialog";
 import { EnrichDialog } from "./components/EnrichDialog";
 import { EnvironmentDialog } from "./components/EnvironmentDialog";
 import { FlowEditor } from "./components/flow/FlowEditor";
@@ -131,6 +132,7 @@ export default function App() {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [palette, setPalette] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
+  const [connectingAgent, setConnectingAgent] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [variableNames, setVariableNames] = useState<string[]>([]);
   // Bumped to make the sidebar reload after something writes to the workspace.
@@ -630,6 +632,7 @@ export default function App() {
           onOpenWorkspace={openWorkspace}
           onImport={() => setImporting(true)}
           onShortcuts={() => setShortcuts(true)}
+          onAgent={() => setConnectingAgent(true)}
           onWorkspaceChange={setWorkspace}
           onManageEnvironments={() => setManagingEnvironments(true)}
           scan={scan}
@@ -779,6 +782,8 @@ export default function App() {
         )}
 
         {shortcuts && <ShortcutsDialog onClose={() => setShortcuts(false)} />}
+
+        {connectingAgent && <AgentDialog onClose={() => setConnectingAgent(false)} />}
 
         {palette && (
           <CommandPalette

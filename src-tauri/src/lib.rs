@@ -7,7 +7,9 @@
 //! `cargo test`, with no GUI harness in the loop. If a command in this file starts making
 //! decisions, the decision belongs in `rl-core` instead.
 
-use rl_core::{EnrichProposal, ProjectScan, RouteLogic, SaveAllReport, WorkspaceInfo};
+use rl_core::{
+    AgentConnection, EnrichProposal, ProjectScan, RouteLogic, SaveAllReport, WorkspaceInfo,
+};
 use rl_flow::{FlowEvent, FlowRun, RunOptions};
 use rl_http::{Exchange, PreparedRequest};
 use rl_model::{Flow, RequestDraft};
@@ -110,6 +112,21 @@ async fn open_or_create_workspace(
 #[tauri::command]
 async fn workspace_info(state: State<'_, AppState>) -> CommandResult<WorkspaceInfo> {
     Ok(state.app.lock().await.info()?)
+}
+
+/// How to connect an agent: the MCP server is this same executable, run as `mcp`.
+///
+/// An AppImage runs from a mount that changes on every launch, so there the path to give
+/// is the AppImage file itself, which it names in `APPIMAGE`.
+#[tauri::command]
+async fn agent_connection(state: State<'_, AppState>) -> CommandResult<AgentConnection> {
+    let executable = match std::env::var_os("APPIMAGE") {
+        Some(appimage) if !appimage.is_empty() => PathBuf::from(appimage),
+        _ => std::env::current_exe().map_err(|e| CommandError {
+            message: format!("could not find this program's own path: {e}"),
+        })?,
+    };
+    Ok(state.app.lock().await.agent_connection(&executable)?)
 }
 
 #[tauri::command]
@@ -452,6 +469,7 @@ pub fn run() {
             open_or_create_workspace,
             workspace_info,
             close_workspace,
+            agent_connection,
             set_environment,
             load_environment,
             save_environment,
