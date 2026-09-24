@@ -122,10 +122,13 @@ export function CodeView({
 
 type Token = { kind: "key" | "string" | "number" | "boolean" | "null" | "punct" | "plain"; text: string };
 
-/** One line of JSON into coloured pieces. A key is a string followed by a colon. */
+/**
+ * One line of JSON into coloured pieces. A key is a string followed by a colon. Anything
+ * else, such as a stray quote, is a plain character: the pieces always add up to the line.
+ */
 export function tokenize(line: string): Token[] {
   const out: Token[] = [];
-  const re = /("(?:[^"\\]|\\.)*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false)\b|\b(null)\b|([{}[\],:])|(\s+)|([^\s"{}[\],:]+)/g;
+  const re = /("(?:[^"\\]|\\.)*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false)\b|\b(null)\b|([{}[\],:])|(\s+)|([^\s"{}[\],:]+)|([\s\S])/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(line)) !== null) {
     if (m[1] !== undefined) {

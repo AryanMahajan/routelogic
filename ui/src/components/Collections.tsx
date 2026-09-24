@@ -377,7 +377,7 @@ function CollectionBlock({
                 title={request.url}
                 className="flex h-full min-w-0 flex-1 items-center gap-2 pl-4 text-left"
               >
-                <MethodBadge method={request.method} className="w-11 shrink-0" />
+                <MethodBadge method={request.method} chip className="w-12 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">{request.name ?? request.url}</span>
               </button>
               <Menu items={requestMenu(request)} />

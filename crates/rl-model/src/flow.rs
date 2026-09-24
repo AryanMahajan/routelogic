@@ -621,7 +621,20 @@ impl Flow {
                             (centre, i)
                         })
                         .collect();
-                    here.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                    // Level with each other, a condition's `true` side goes above its `false`.
+                    let arm = |i: usize| {
+                        let into = self.upstream(&self.nodes[i].id);
+                        match into.filter_map(|e| e.handle.as_deref()).next() {
+                            Some(HANDLE_TRUE) => 0,
+                            Some(HANDLE_FALSE) => 2,
+                            _ => 1,
+                        }
+                    };
+                    here.sort_by(|a, b| {
+                        a.0.total_cmp(&b.0)
+                            .then(arm(a.1).cmp(&arm(b.1)))
+                            .then(a.1.cmp(&b.1))
+                    });
                     let mut next = 0;
                     for (centre, i) in here {
                         let row = if centre.is_finite() {
@@ -945,6 +958,19 @@ mod tests {
         assert!(at(&b1).y > at(&a1).y, "the second chain is below the first");
         assert!(at(&only).y > at(&b1).y, "and a lone step below both");
         assert_eq!(at(&only).x, 0.0);
+    }
+
+    #[test]
+    fn a_conditions_true_side_is_laid_out_above_its_false_side() {
+        let mut flow = Flow::new("branch");
+        let check = flow.add(Node::condition("{{n}}", Operator::Exists, ""));
+        let no = flow.add(Node::display("no"));
+        let yes = flow.add(Node::display("yes"));
+        flow.edges.push(Edge::new(&check, &no).via(HANDLE_FALSE));
+        flow.edges.push(Edge::new(&check, &yes).via(HANDLE_TRUE));
+        flow.lay_out();
+        let at = |id: &NodeId| flow.node(id).unwrap().position.unwrap();
+        assert!(at(&yes).y < at(&no).y);
     }
 
     #[test]

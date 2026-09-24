@@ -693,14 +693,18 @@ export default function App() {
                     font-semibold outline-none placeholder:text-muted/60 focus:border-edge focus:bg-panel"
                 />
 
+                <label htmlFor="save-target" className="shrink-0 text-[11px] text-muted">
+                  Save to
+                </label>
                 <input
+                  id="save-target"
                   value={active.collection ?? saveTarget}
                   onChange={(e) => {
                     setSaveTarget(e.target.value);
                     if (active.collection !== null) updateTab(active.id, { collection: null });
                   }}
                   list="collection-names"
-                  title="Collection to save into"
+                  title="The collection this request is saved into — pick one or type a new name"
                   className="w-32 shrink-0 rounded border border-edge bg-panel px-2 py-1 outline-none focus:border-accent"
                 />
                 <datalist id="collection-names">

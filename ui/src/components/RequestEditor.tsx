@@ -111,10 +111,17 @@ export function RequestEditor({
             onClick={onSend}
             disabled={sending || !request.url}
             title="Ctrl+Enter"
-            className="shrink-0 rounded bg-accent px-4 py-1.5 font-semibold text-ground transition
-              hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+            className={`w-[6.5rem] shrink-0 rounded bg-accent px-4 py-1.5 font-semibold text-ground transition
+              hover:brightness-110 disabled:cursor-not-allowed ${sending ? "rl-sending" : "disabled:opacity-40"}`}
           >
-            {sending ? "Sending…" : "Send"}
+            {sending ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="rl-spinner" aria-hidden />
+                Sending
+              </span>
+            ) : (
+              "Send"
+            )}
           </button>
         )}
         {onSend && <CopyMenu request={request} exchange={exchange} collection={collection} />}
@@ -294,6 +301,7 @@ function BodyEditor({
           value={body.content}
           onChange={(content) => onChange({ ...body, content })}
           onBlur={tidy}
+          highlight={body.type === "json" ? "json" : "text"}
           placeholder={body.type === "json" ? '{\n  "name": "Aryan"\n}' : ""}
           className="resize-none rounded border border-edge bg-panel p-3 font-mono
             leading-relaxed outline-none placeholder:text-muted/50 focus:border-accent"

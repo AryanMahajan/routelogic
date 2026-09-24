@@ -1,6 +1,7 @@
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -8,10 +9,12 @@ import {
   type InputHTMLAttributes,
   type KeyboardEvent,
   type RefObject,
+  type ReactNode,
   type TextareaHTMLAttributes,
 } from "react";
 import { createPortal } from "react-dom";
 import { useVariableNames } from "../variables";
+import { tokenize } from "./CodeView";
 
 /**
  * `{{variable}}` completion for a text field.
@@ -248,17 +251,37 @@ export function VariableTextarea({
   onChange,
   onKeyDown,
   onBlur,
+  onScroll,
+  highlight,
   className = "",
   ...rest
 }: Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange"> & {
   value: string;
   onChange: (value: string) => void;
+  /**
+   * Colour the text as it is typed: JSON the way the response viewer colours it, and
+   * `{{variables}}` in any text. The textarea stays the real editor, with its caret,
+   * selection, undo and completion; a coloured copy is drawn behind its transparent text.
+   */
+  highlight?: "json" | "text";
 }) {
   const area = useRef<HTMLTextAreaElement>(null);
+  const layer = useRef<HTMLPreElement>(null);
   const c = useCompletion(area, value, onChange);
+  const coloured = useMemo(
+    () => (highlight ? colourBody(value, highlight === "json") : null),
+    [value, highlight],
+  );
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${highlight ? "rl-hl" : ""}`}>
+      {highlight && (
+        <pre ref={layer} aria-hidden className={`rl-hl-layer ${className}`}>
+          {coloured}
+          {/* A trailing newline would otherwise collapse, leaving the caret's line uncovered. */}
+          {"\n "}
+        </pre>
+      )}
       <textarea
         ref={area}
         value={value}
@@ -271,11 +294,45 @@ export function VariableTextarea({
           onBlur?.(e);
         }}
         onClick={(e) => c.inspect(value, e.currentTarget.selectionStart ?? value.length)}
+        onScroll={(e) => {
+          if (layer.current) {
+            layer.current.scrollTop = e.currentTarget.scrollTop;
+            layer.current.scrollLeft = e.currentTarget.scrollLeft;
+          }
+          onScroll?.(e);
+        }}
         spellCheck={false}
-        className={`min-h-0 w-full flex-1 ${className}`}
+        className={`min-h-0 w-full flex-1 ${highlight ? "rl-hl-text" : ""} ${className}`}
         {...rest}
       />
       {c.popup}
     </div>
   );
+}
+
+/** Past this many lines a body is shown uncoloured: colouring it buys nothing. */
+const COLOUR_LINE_BUDGET = 3000;
+const VARIABLE = /(\{\{[^{}]*\}\})/;
+
+/** A body as coloured spans, line by line, with `{{variables}}` picked out wherever they are. */
+export function colourBody(text: string, json: boolean): ReactNode {
+  const lines = text.split("\n");
+  if (lines.length > COLOUR_LINE_BUDGET) return text;
+  const out: ReactNode[] = [];
+  lines.forEach((line, l) => {
+    if (l > 0) out.push("\n");
+    const tokens = json ? tokenize(line) : [{ kind: "plain" as const, text: line }];
+    tokens.forEach((token, t) => {
+      token.text.split(VARIABLE).forEach((piece, p) => {
+        if (!piece) return;
+        const kind = p % 2 === 1 ? "var" : token.kind;
+        out.push(
+          <span key={`${l}-${t}-${p}`} className={kind === "plain" ? undefined : `rl-tok-${kind}`}>
+            {piece}
+          </span>,
+        );
+      });
+    });
+  });
+  return out;
 }

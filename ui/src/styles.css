@@ -117,7 +117,7 @@ button {
   --xy-controls-button-border-color: var(--t-edge);
   --xy-controls-box-shadow: none;
   --xy-minimap-background-color: var(--t-panel);
-  --xy-minimap-mask-background-color: rgb(0 0 0 / 0.3);
+  --xy-minimap-mask-background-color: rgb(0 0 0 / 0.18);
   --xy-minimap-node-background-color: var(--t-raised);
   --xy-selection-background-color: rgb(124 156 255 / 0.08);
   --xy-selection-border: 1px dashed var(--t-accent);
@@ -135,6 +135,15 @@ button {
   fill: var(--t-muted);
   font-size: 10px;
   font-family: var(--font-mono);
+}
+.rl-minimap {
+  border: 1px solid var(--t-edge);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.rl-minimap svg {
+  width: 168px;
+  height: 112px;
 }
 .react-flow__minimap-mask {
   fill: var(--xy-minimap-mask-background-color);
@@ -239,3 +248,156 @@ html[data-theme="light"] .rl-code {
 .rl-tok-punct { color: var(--t-muted); }
 .rl-match { background: color-mix(in srgb, var(--t-post) 35%, transparent); color: inherit; border-radius: 2px; }
 .rl-match-active { background: var(--t-post); color: #1c1c21; border-radius: 2px; }
+.rl-tok-var {
+  color: var(--t-accent);
+  background: color-mix(in srgb, var(--t-accent) 14%, transparent);
+  border-radius: 3px;
+}
+
+/* --- coloured editing: a request body --------------------------------------------------
+   The textarea is the editor; its text is transparent and a coloured copy sits behind it.
+   Both must lay text out identically, so everything that affects wrapping is pinned here. */
+
+.rl-hl {
+  --tok-key: #9cc4ff;
+  --tok-string: #f0a56c;
+  --tok-number: #b5e88a;
+  --tok-boolean: #d7a0ff;
+  --tok-null: #9a9aa7;
+}
+:root[data-theme="light"] .rl-hl,
+html[data-theme="light"] .rl-hl {
+  --tok-key: #1d4ed8;
+  --tok-string: #b45309;
+  --tok-number: #15803d;
+  --tok-boolean: #7e22ce;
+  --tok-null: #6a6a78;
+}
+.rl-hl-layer,
+.rl-hl-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  tab-size: 2;
+  letter-spacing: normal;
+  line-height: 1.625;
+  scrollbar-gutter: stable;
+}
+.rl-hl-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--t-ink);
+}
+.rl-hl-text {
+  position: relative;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--t-ink);
+}
+.rl-hl-text::selection {
+  background: color-mix(in srgb, var(--t-accent) 35%, transparent);
+  color: transparent;
+}
+
+/* --- a request in flight ---------------------------------------------------------------- */
+
+.rl-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  animation: rl-spin 700ms linear infinite;
+}
+@keyframes rl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.rl-sending {
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, white 28%, transparent) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: rl-shimmer 1.1s linear infinite;
+}
+@keyframes rl-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+.rl-progress {
+  background: linear-gradient(90deg, transparent, var(--t-accent), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: rl-sweep 1.2s ease-in-out infinite;
+}
+@keyframes rl-sweep {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
+}
+.rl-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--t-accent);
+  animation: rl-bounce 900ms ease-in-out infinite;
+}
+@keyframes rl-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+.rl-arrive {
+  animation: rl-arrive 220ms ease-out;
+}
+@keyframes rl-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.rl-status-pop {
+  animation: rl-pop 320ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+@keyframes rl-pop {
+  from {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rl-spinner,
+  .rl-sending,
+  .rl-progress,
+  .rl-dot,
+  .rl-arrive,
+  .rl-status-pop,
+  .rl-node-running {
+    animation: none;
+  }
+  .rl-progress {
+    background-size: 100% 100%;
+    opacity: 0.6;
+  }
+}

@@ -12,6 +12,9 @@ import { displayName, FolderRow, TreeRow } from "./Tree";
  * gap rather than hidden, because a confidently wrong path is worse than a visibly missing
  * one.
  */
+/** An API with at most this many endpoints opens with every group expanded. */
+const OPEN_UP_TO = 60;
+
 export function Explorer({
   scan,
   scanning,
@@ -32,9 +35,12 @@ export function Explorer({
   addingToFlow?: boolean;
 }) {
   const [filter, setFilter] = useState("");
-  // Groups start closed; a filter opens every group it matched, or the hits would be hidden.
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // A small API starts with every group open, a large one closed; `toggled` holds the groups
+  // flipped from that. A filter opens every group it matched, or the hits would be hidden.
+  const [toggled, setToggled] = useState<Set<string>>(new Set());
   const filtering = filter.trim() !== "";
+  const openByDefault = (scan?.endpoints.length ?? 0) <= OPEN_UP_TO;
+  const isOpen = (group: string) => filtering || openByDefault !== toggled.has(group);
 
   const groups = useMemo(() => {
     if (!scan) return [];
@@ -60,7 +66,7 @@ export function Explorer({
   }, [scan, filter]);
 
   function toggle(group: string) {
-    setExpanded((current) => {
+    setToggled((current) => {
       const next = new Set(current);
       if (next.has(group)) next.delete(group);
       else next.add(group);
@@ -184,12 +190,12 @@ export function Explorer({
         {groups.map(([group, endpoints]) => (
           <div key={group}>
             <FolderRow
-              open={filtering || expanded.has(group)}
+              open={isOpen(group)}
               name={displayName(group)}
               count={endpoints.length}
               onToggle={() => toggle(group)}
             />
-            {(filtering || expanded.has(group)) &&
+            {isOpen(group) &&
               endpoints.map((endpoint) => (
                 <EndpointRow
                   key={endpoint.id}
@@ -248,7 +254,7 @@ function EndpointRow({
         }
         className="flex h-full min-w-0 flex-1 items-center gap-2 pl-4 text-left disabled:cursor-not-allowed"
       >
-        <MethodBadge method={endpoint.method} className="w-11 shrink-0" />
+        <MethodBadge method={endpoint.method} chip className="w-12 shrink-0" />
         <span
           className={`min-w-0 flex-1 truncate font-mono ${
             endpoint.unresolved ? "text-muted" : ""

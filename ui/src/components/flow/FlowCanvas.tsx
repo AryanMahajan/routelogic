@@ -475,8 +475,10 @@ function Canvas({
             if (status === "passed") return "var(--t-get)";
             if (status === "failed") return "var(--t-delete)";
             if (status === "running") return "var(--t-accent)";
-            return "var(--t-raised)";
+            return "color-mix(in srgb, var(--t-muted) 55%, transparent)";
           }}
+          nodeBorderRadius={6}
+          className="rl-minimap"
         />
       </ReactFlow>
 

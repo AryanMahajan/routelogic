@@ -104,7 +104,7 @@ export function RequestNode({ data, selected }: NodeProps<RequestRfNode>) {
       {label && <div className="truncate px-3 pt-0.5 text-muted">{label}</div>}
 
       {(node.extract.length > 0 || node.assert.length > 0) && (
-        <div className="flex flex-wrap gap-x-3 px-3 pt-1 text-[10px] text-muted">
+        <div className="flex flex-wrap gap-x-3 px-3 pt-1 text-[11px] text-muted">
           {node.extract.length > 0 && (
             <span className="truncate" title={node.extract.map((e) => `{{${e.name}}}`).join(" ")}>
               <span className="text-accent">↓</span>{" "}

@@ -202,7 +202,7 @@ export function EndpointList({
                   i === search.active ? "bg-raised" : ""
                 }`}
               >
-                <MethodBadge method={endpoint.method} className="w-12 shrink-0 text-right" />
+                <MethodBadge method={endpoint.method} chip className="w-12 shrink-0" />
                 <span className="min-w-0 flex-1 truncate font-mono">{endpoint.path}</span>
                 {endpoint.summary && (
                   <span className="max-w-[40%] shrink-0 truncate text-[10px] text-muted">{endpoint.summary}</span>

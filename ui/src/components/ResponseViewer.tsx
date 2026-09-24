@@ -27,6 +27,8 @@ export function ResponseViewer({
   const [active, setActive] = useState(0);
   const onMatchCount = useCallback((n: number) => setMatches(n), []);
   const find = useRef<HTMLInputElement>(null);
+  const shownExchange = useRef<Exchange | null>(null);
+  const arrival = useRef(0);
 
   // Ctrl+F: find in the body, whichever tab was showing.
   useEffect(() => {
@@ -55,8 +57,14 @@ export function ResponseViewer({
     setActive(0);
   }, [exchange, query]);
 
+  // Each new response mounts afresh, so it animates in; re-renders of the same one do not.
+  if (exchange !== shownExchange.current) {
+    shownExchange.current = exchange;
+    arrival.current += 1;
+  }
+
   if (sending) {
-    return <Placeholder>Sending…</Placeholder>;
+    return <Waiting />;
   }
 
   if (error) {
@@ -71,7 +79,19 @@ export function ResponseViewer({
   }
 
   if (!exchange) {
-    return <Placeholder>Send a request to see the response.</Placeholder>;
+    return (
+      <Placeholder>
+        <div className="flex flex-col items-center gap-2 text-center">
+          <p>Send a request to see the response.</p>
+          <p className="text-[11px]">
+            <kbd className="rounded border border-edge bg-raised px-1.5 py-0.5 font-mono text-[10px] text-ink">Ctrl</kbd>
+            {" + "}
+            <kbd className="rounded border border-edge bg-raised px-1.5 py-0.5 font-mono text-[10px] text-ink">Enter</kbd>
+            {" sends from anywhere in the request"}
+          </p>
+        </div>
+      </Placeholder>
+    );
   }
 
   const { response } = exchange;
@@ -92,7 +112,7 @@ export function ResponseViewer({
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col border-t border-edge">
+    <section key={arrival.current} className="rl-arrive flex min-h-0 flex-1 flex-col border-t border-edge">
       {/* Tabs, with the verdict on the right */}
       <div className="flex shrink-0 items-center gap-1 border-b border-edge px-3">
         {(["body", "headers", "timing", "sent"] as Tab[]).map((name) => (
@@ -113,7 +133,7 @@ export function ResponseViewer({
         ))}
 
         <div className="ml-auto flex items-center gap-3 py-1.5 text-[11px]">
-          <span className={`rounded px-2 py-0.5 font-mono font-bold ${tone}`}>
+          <span className={`rl-status-pop rounded px-2 py-0.5 font-mono font-bold ${tone}`}>
             {response.status} {response.status_text}
           </span>
           <span className="text-muted tabular-nums">{response.timing.total_ms} ms</span>
@@ -323,6 +343,39 @@ function HeaderTable({ headers }: { headers: [string, string][] }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+/**
+ * While a request is out: a bar that sweeps across the top of the pane and a clock counting
+ * up, so a slow endpoint reads as slow rather than as nothing happening.
+ */
+function Waiting() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const start = performance.now();
+    const id = window.setInterval(() => setElapsed(performance.now() - start), 100);
+    return () => window.clearInterval(id);
+  }, []);
+  return (
+    <section
+      className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-3 overflow-hidden border-t border-edge text-muted"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="rl-progress absolute inset-x-0 top-0 h-0.5" aria-hidden />
+      <div className="flex items-center gap-1.5" aria-hidden>
+        <span className="rl-dot" />
+        <span className="rl-dot" style={{ animationDelay: "150ms" }} />
+        <span className="rl-dot" style={{ animationDelay: "300ms" }} />
+      </div>
+      <p>
+        Waiting for the response
+        <span className="ml-2 font-mono tabular-nums text-ink">
+          {elapsed < 1000 ? `${Math.floor(elapsed / 100) * 100} ms` : `${(elapsed / 1000).toFixed(1)} s`}
+        </span>
+      </p>
+    </section>
   );
 }
 
