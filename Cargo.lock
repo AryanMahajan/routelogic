@@ -3019,7 +3019,7 @@ dependencies = [
 
 [[package]]
 name = "rl-core"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "rl-discovery",
  "rl-flow",
@@ -3038,7 +3038,7 @@ dependencies = [
 
 [[package]]
 name = "rl-discovery"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "ignore",
  "rl-model",
@@ -3056,7 +3056,7 @@ dependencies = [
 
 [[package]]
 name = "rl-flow"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "rl-http",
  "rl-model",
@@ -3068,7 +3068,7 @@ dependencies = [
 
 [[package]]
 name = "rl-http"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "base64 0.22.1",
  "reqwest 0.12.28",
@@ -3082,7 +3082,7 @@ dependencies = [
 
 [[package]]
 name = "rl-import"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "base64 0.22.1",
  "rl-model",
@@ -3095,7 +3095,7 @@ dependencies = [
 
 [[package]]
 name = "rl-mcp"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "rl-core",
  "rl-flow",
@@ -3111,7 +3111,7 @@ dependencies = [
 
 [[package]]
 name = "rl-model"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "schemars 1.2.2",
  "serde",
@@ -3122,7 +3122,7 @@ dependencies = [
 
 [[package]]
 name = "rl-workspace"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "dirs",
  "notify",
@@ -3174,7 +3174,7 @@ dependencies = [
 
 [[package]]
 name = "routelogic"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "rl-core",
  "rl-discovery",
